@@ -1,0 +1,10 @@
+# Dependencias instaladas
+frontend/node_modules/
+
+# Artefactos generados por Scala/SBT
+backend/target/
+backend/project/target/
+backend/.bsp/
+
+# Configuración local del IDE
+.idea/
