@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Service | Where-Object { $_.Name -match 'maria|mysql' -or $_.DisplayName -match 'maria|mysql' } | Select-Object Name, DisplayName, Status; Get-ChildItem \"C:\\\\Program Files\", \"C:\\\\Program Files \\(x86\\)\", \"C:\\\\xampp\" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'maria|mysql|xampp' } | Select-Object FullName)",
+      "Bash(python -c \"import bcrypt; print\\(bcrypt.__version__\\)\")",
+      "Bash(docker run *)",
+      "Bash(docker exec *)",
+      "Bash(break)",
+      "Bash(docker rm *)",
+      "Bash(python -)"
+    ]
+  }
+}

@@ -1,0 +1,48 @@
+# AeroNet - base de datos de desarrollo (US 2).
+#
+#   docker compose up -d                      # crea la base y carga db/01..03 en orden
+#   docker compose exec db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" aeronet < /aeronet/db/04_tests.sql'
+#   docker compose down -v                    # borra el volumen (la próxima vez recarga los scripts)
+#
+# Manual de uso: docs/manual-base-de-datos.md
+#
+# Los scripts de /docker-entrypoint-initdb.d solo se ejecutan cuando el volumen
+# de datos está vacío. Las contraseñas son de desarrollo: sobreescribirlas con
+# variables de entorno o un archivo .env.
+services:
+  db:
+    image: mariadb:11.4
+    container_name: aeronet-db
+    restart: unless-stopped
+    environment:
+      # Hora del sistema del contenedor. Necesario además de --default-time-zone:
+      # la carga inicial de db/*.sql corre en un servidor temporal que el
+      # entrypoint arranca con --default-time-zone=SYSTEM (UTC si no se fija TZ).
+      TZ: America/Argentina/Buenos_Aires
+      MARIADB_ROOT_PASSWORD: ${AERONET_DB_ROOT_PASSWORD:-aeronet_root_dev}
+      MARIADB_DATABASE: aeronet
+      MARIADB_USER: ${AERONET_DB_USER:-aeronet_app}
+      MARIADB_PASSWORD: ${AERONET_DB_PASSWORD:-aeronet_app_dev}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-time-zone=-03:00
+      - --event-scheduler=ON
+    ports:
+      - "${AERONET_DB_PORT:-3306}:3306"
+    volumes:
+      - aeronet-data:/var/lib/mysql
+      - ./db/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/02_logic.sql:/docker-entrypoint-initdb.d/02_logic.sql:ro
+      - ./db/03_seed.sql:/docker-entrypoint-initdb.d/03_seed.sql:ro
+      # Todos los scripts (incluido 04_tests.sql) accesibles dentro del contenedor,
+      # para correrlos igual desde PowerShell, cmd o bash.
+      - ./db:/aeronet/db:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  aeronet-data:
