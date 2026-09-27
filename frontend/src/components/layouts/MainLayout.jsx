@@ -4,7 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import './MainLayout.css';
 
 export default function MainLayout({ children }) {
-  const { user, roles, permissions, logout, hasRole, hasPermission } = useAuth();
+  const { user, roles, logout, hasRole, hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);

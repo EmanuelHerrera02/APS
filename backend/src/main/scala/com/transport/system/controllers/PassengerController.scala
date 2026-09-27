@@ -3,7 +3,6 @@ package com.transport.system.controllers
 import com.transport.system.middleware.{AuthorizedAction, SecurityException}
 import com.transport.system.models.{Roles, Permissions}
 import org.json4s._
-import org.json4s.native.JsonMethods._
 import org.scalatra._
 import org.scalatra.json._
 import org.slf4j.LoggerFactory

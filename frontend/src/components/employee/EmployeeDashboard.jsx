@@ -2,7 +2,7 @@ import MainLayout from '../layouts/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function EmployeeDashboard() {
-  const { user, permissions } = useAuth();
+  const { permissions } = useAuth();
 
   return (
     <MainLayout>

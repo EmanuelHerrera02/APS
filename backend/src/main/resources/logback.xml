@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Sin esto, logback deja Jetty y Scalatra en DEBUG y la salida se vuelve
+  ilegible. El nivel de la aplicacion se sube con -Daeronet.log.level=DEBUG.
+-->
+<configuration>
+  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %-5level %logger{28} -- %msg%n</pattern>
+    </encoder>
+  </appender>
+
+  <logger name="org.eclipse.jetty" level="WARN"/>
+  <logger name="org.scalatra" level="WARN"/>
+  <logger name="com.transport.system" level="${aeronet.log.level:-INFO}"/>
+
+  <root level="WARN">
+    <appender-ref ref="STDOUT"/>
+  </root>
+</configuration>

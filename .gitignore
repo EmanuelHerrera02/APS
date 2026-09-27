@@ -6,5 +6,24 @@ backend/target/
 backend/project/target/
 backend/.bsp/
 
+# Build del frontend
+frontend/dist/
+
+# Estado local del LSP de Scala (Metals): metals.mv.db, metals.lock.db,
+# metals.log. Son bases que crecen sin parar y no son fuente.
+.metals/
+.bloop/
+
 # Configuración local del IDE
 .idea/
+.vscode/
+
+# Variables de entorno reales. Solo se versiona .env.example; acá van a parar
+# URLs internas y, más adelante, secretos.
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Logs sueltos. Los de sbt ya caen en backend/target/, esto es la red para los
+# que aparezcan en otro lado.
+*.log
