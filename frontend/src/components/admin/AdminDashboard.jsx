@@ -1,5 +1,6 @@
 import MainLayout from '../layouts/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
+import { Permissions } from '../../security/Authorization';
 
 export default function AdminDashboard() {
   const { user, permissions } = useAuth();
@@ -36,43 +37,43 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Permisos Administrativos</h3>
           <div className="space-y-2">
-            {permissions.includes('user:list') && (
+            {permissions.includes(Permissions.USER_LIST) && (
               <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
                 <span>🔑</span>
                 <span className="text-sm">Listar usuarios</span>
               </div>
             )}
-            {permissions.includes('user:create') && (
+            {permissions.includes(Permissions.USER_CREATE) && (
               <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
                 <span>🔑</span>
                 <span className="text-sm">Crear nuevos usuarios</span>
               </div>
             )}
-            {permissions.includes('user:edit') && (
+            {permissions.includes(Permissions.USER_EDIT) && (
               <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
                 <span>🔑</span>
                 <span className="text-sm">Editar usuarios</span>
               </div>
             )}
-            {permissions.includes('user:change_role') && (
+            {permissions.includes(Permissions.USER_CHANGE_ROLE) && (
               <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
                 <span>🔑</span>
                 <span className="text-sm">Cambiar roles de usuario</span>
               </div>
             )}
-            {permissions.includes('report:view_financial') && (
+            {permissions.includes(Permissions.REPORT_VIEW_FINANCIAL) && (
               <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
                 <span>🔑</span>
                 <span className="text-sm">Ver reportes financieros</span>
               </div>
             )}
-            {permissions.includes('admin:view_audit') && (
+            {permissions.includes(Permissions.ADMIN_VIEW_AUDIT) && (
               <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
                 <span>🔑</span>
                 <span className="text-sm">Ver auditoría del sistema</span>
               </div>
             )}
-            {permissions.includes('admin:config') && (
+            {permissions.includes(Permissions.ADMIN_CONFIG) && (
               <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
                 <span>🔑</span>
                 <span className="text-sm">Configurar el sistema</span>

@@ -65,6 +65,27 @@ CREATE TABLE usuario (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------
+-- permiso y rol_permiso: catálogo común para backend, frontend y base.
+-- Los códigos de rol deben coincidir con usuario.rol.
+-- -----------------------------------------------------------------------------
+CREATE TABLE permiso (
+  codigo      VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  descripcion VARCHAR(160) NOT NULL,
+  PRIMARY KEY (codigo),
+  CONSTRAINT chk_permiso_codigo CHECK (codigo REGEXP BINARY '^[a-z]+:[a-z_]+$')
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE rol_permiso (
+  rol           ENUM('PASAJERO','MOSTRADOR','ADMIN') NOT NULL,
+  permiso_codigo VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (rol, permiso_codigo),
+  KEY ix_rol_permiso_codigo (permiso_codigo),
+  CONSTRAINT fk_rol_permiso_permiso FOREIGN KEY (permiso_codigo)
+    REFERENCES permiso (codigo) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
 -- dispositivo_usuario: tokens push de la app móvil.
 -- -----------------------------------------------------------------------------
 CREATE TABLE dispositivo_usuario (

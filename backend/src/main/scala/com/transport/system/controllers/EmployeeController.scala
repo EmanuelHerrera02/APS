@@ -23,8 +23,8 @@ class EmployeeController extends ScalatraServlet with JacksonJsonSupport with Au
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasPermission(request, Permissions.SELL_TICKETS)) {
-        logAccessDenied(userId, "view_all_reservations", s"Missing permission: ${Permissions.SELL_TICKETS}")
+      if (!hasPermission(request, Permissions.RESERVATION_VIEW_ALL)) {
+        logAccessDenied(userId, "view_all_reservations", s"Missing permission: ${Permissions.RESERVATION_VIEW_ALL}")
         Forbidden(Map("error" -> "No tienes permiso para ver todas las reservas"))
       } else {
         logger.info(s"Employee $userId viewing all reservations")
@@ -49,8 +49,8 @@ class EmployeeController extends ScalatraServlet with JacksonJsonSupport with Au
       val userId = getUserIdFromRequest(request)
       val reservationId = params("id")
 
-      if (!hasPermission(request, Permissions.SELL_TICKETS)) {
-        logAccessDenied(userId, "confirm_reservation", s"Missing permission: ${Permissions.SELL_TICKETS}")
+      if (!hasPermission(request, Permissions.RESERVATION_CONFIRM)) {
+        logAccessDenied(userId, "confirm_reservation", s"Missing permission: ${Permissions.RESERVATION_CONFIRM}")
         Forbidden(Map("error" -> "No tienes permiso para confirmar reservas"))
       } else {
         logger.info(s"Employee $userId confirming reservation $reservationId")
@@ -74,8 +74,8 @@ class EmployeeController extends ScalatraServlet with JacksonJsonSupport with Au
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasPermission(request, Permissions.SELL_TICKETS)) {
-        logAccessDenied(userId, "process_payment", s"Missing permission: ${Permissions.SELL_TICKETS}")
+      if (!hasPermission(request, Permissions.PAYMENT_PROCESS)) {
+        logAccessDenied(userId, "process_payment", s"Missing permission: ${Permissions.PAYMENT_PROCESS}")
         Forbidden(Map("error" -> "No tienes permiso para procesar pagos"))
       } else {
         logger.info(s"Employee $userId processing payment")
@@ -100,8 +100,8 @@ class EmployeeController extends ScalatraServlet with JacksonJsonSupport with Au
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasPermission(request, Permissions.VIEW_HISTORY)) {
-        logAccessDenied(userId, "view_operational_reports", s"Missing permission: ${Permissions.VIEW_HISTORY}")
+      if (!hasPermission(request, Permissions.REPORT_VIEW_OPERATIONAL)) {
+        logAccessDenied(userId, "view_operational_reports", s"Missing permission: ${Permissions.REPORT_VIEW_OPERATIONAL}")
         Forbidden(Map("error" -> "No tienes permiso para ver reportes"))
       } else {
         logger.info(s"Employee $userId viewing operational reports")

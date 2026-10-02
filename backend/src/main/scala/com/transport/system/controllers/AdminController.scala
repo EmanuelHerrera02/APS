@@ -23,8 +23,8 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasRole(request, Roles.ADMIN)) {
-        logAccessDenied(userId, "admin_panel_access", "Missing role: admin")
+      if (!hasRole(request, Roles.ADMIN) || !hasPermission(request, Permissions.ADMIN_PANEL_ACCESS)) {
+        logAccessDenied(userId, "admin_panel_access", "Missing role or permission: ADMIN / admin:panel_access")
         Forbidden(Map("error" -> "No tienes acceso al panel de administración"))
       } else {
         logger.info(s"Admin $userId accessing admin dashboard")
@@ -53,8 +53,8 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasPermission(request, Permissions.MANAGE_USERS)) {
-        logAccessDenied(userId, "list_users", s"Missing permission: ${Permissions.MANAGE_USERS}")
+      if (!hasPermission(request, Permissions.USER_LIST)) {
+        logAccessDenied(userId, "list_users", s"Missing permission: ${Permissions.USER_LIST}")
         Forbidden(Map("error" -> "No tienes permiso para listar usuarios"))
       } else {
         logger.info(s"Admin $userId listing users")
@@ -78,8 +78,8 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasPermission(request, Permissions.MANAGE_USERS)) {
-        logAccessDenied(userId, "create_user", s"Missing permission: ${Permissions.MANAGE_USERS}")
+      if (!hasPermission(request, Permissions.USER_CREATE)) {
+        logAccessDenied(userId, "create_user", s"Missing permission: ${Permissions.USER_CREATE}")
         Forbidden(Map("error" -> "No tienes permiso para crear usuarios"))
       } else {
         logger.info(s"Admin $userId creating new user")
@@ -105,8 +105,8 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
       val userId = getUserIdFromRequest(request)
       val targetUserId = params("id")
 
-      if (!hasPermission(request, Permissions.MANAGE_USERS)) {
-        logAccessDenied(userId, s"edit_user_$targetUserId", s"Missing permission: ${Permissions.MANAGE_USERS}")
+      if (!hasPermission(request, Permissions.USER_EDIT)) {
+        logAccessDenied(userId, s"edit_user_$targetUserId", s"Missing permission: ${Permissions.USER_EDIT}")
         Forbidden(Map("error" -> "No tienes permiso para editar usuarios"))
       } else {
         logger.info(s"Admin $userId editing user $targetUserId")
@@ -130,8 +130,8 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasPermission(request, Permissions.VIEW_REPORTS)) {
-        logAccessDenied(userId, "view_financial_reports", s"Missing permission: ${Permissions.VIEW_REPORTS}")
+      if (!hasPermission(request, Permissions.REPORT_VIEW_FINANCIAL)) {
+        logAccessDenied(userId, "view_financial_reports", s"Missing permission: ${Permissions.REPORT_VIEW_FINANCIAL}")
         Forbidden(Map("error" -> "No tienes permiso para ver reportes financieros"))
       } else {
         logger.info(s"Admin $userId viewing financial reports")
@@ -155,8 +155,8 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasPermission(request, Permissions.MANAGE_SYSTEM)) {
-        logAccessDenied(userId, "view_audit", s"Missing permission: ${Permissions.MANAGE_SYSTEM}")
+      if (!hasPermission(request, Permissions.ADMIN_VIEW_AUDIT)) {
+        logAccessDenied(userId, "view_audit", s"Missing permission: ${Permissions.ADMIN_VIEW_AUDIT}")
         Forbidden(Map("error" -> "No tienes permiso para ver la auditoría"))
       } else {
         logger.info(s"Admin $userId viewing audit logs")

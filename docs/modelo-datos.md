@@ -486,12 +486,12 @@ No hubo que cambiar ninguna de las decisiones de diseño acordadas: todas se imp
 
 ## 6. Pendientes y puntos a validar
 
-- **Modelos del backend.** `backend/.../models/Models.scala` (US 4) modela `Role` y `Permission`
-  como entidades, con roles `admin`, `counter_employee` y `passenger`, y campos en inglés
-  (`status`, `lastLogin`, `phone`). La base, según las decisiones de US 2, usa
-  `rol ENUM('ADMIN','MOSTRADOR','PASAJERO')` y los permisos quedan en código (como ya están en el
-  objeto `Permissions`). Mapeo: `status` ↔ `activo`, `lastLogin` ↔ `ultimo_acceso`,
-  `phone` ↔ `telefono`. Hay que alinear el backend al integrar.
+- **Roles y permisos (US 4).** `usuario.rol`, `Roles` en Scala y `Roles` en
+  `frontend/src/security/Authorization.js` usan `ADMIN`, `MOSTRADOR` y `PASAJERO`.
+  El catálogo de códigos está en `permiso`; `rol_permiso` asigna esos permisos a cada rol.
+  `Permissions` en Scala y frontend usa los mismos códigos que `permiso.codigo`.
+  Los nombres de campos del modelo de usuario aún requieren mapeo al integrar (`status` ↔ `activo`,
+  `lastLogin` ↔ `ultimo_acceso`, `phone` ↔ `telefono`).
 - **Reembolsos y reubicación** de compras confirmadas en salidas canceladas: el modelo lo soporta
   (`pago.estado = REEMBOLSADO`, `compra` `CONFIRMADA → CANCELADA`), pero falta definir el proceso.
 - **Numeración fiscal de facturas** (punto de venta, correlatividad y CAE de AFIP): hoy `numero` es

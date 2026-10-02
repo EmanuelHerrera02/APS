@@ -14,6 +14,49 @@
 USE aeronet;
 SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- Catálogo de permisos compartido con backend y frontend.
+INSERT INTO permiso (codigo, descripcion) VALUES
+  ('auth:login', 'Iniciar sesión'),
+  ('profile:view_own', 'Ver perfil propio'),
+  ('reservation:view_own', 'Ver reservas propias'),
+  ('reservation:create', 'Crear reservas'),
+  ('reservation:view_all', 'Ver todas las reservas'),
+  ('reservation:confirm', 'Confirmar reservas'),
+  ('payment:process', 'Procesar pagos'),
+  ('payment:register_method', 'Registrar métodos de pago'),
+  ('report:view_operational', 'Ver reportes operacionales'),
+  ('admin:panel_access', 'Acceder al panel administrativo'),
+  ('user:list', 'Listar usuarios'),
+  ('user:create', 'Crear usuarios'),
+  ('user:edit', 'Editar usuarios'),
+  ('user:change_role', 'Cambiar roles de usuarios'),
+  ('report:view_financial', 'Ver reportes financieros'),
+  ('admin:view_audit', 'Ver auditoría'),
+  ('admin:config', 'Configurar el sistema');
+
+INSERT INTO rol_permiso (rol, permiso_codigo) VALUES
+  ('ADMIN', 'auth:login'),
+  ('ADMIN', 'profile:view_own'),
+  ('ADMIN', 'admin:panel_access'),
+  ('ADMIN', 'user:list'),
+  ('ADMIN', 'user:create'),
+  ('ADMIN', 'user:edit'),
+  ('ADMIN', 'user:change_role'),
+  ('ADMIN', 'report:view_financial'),
+  ('ADMIN', 'admin:view_audit'),
+  ('ADMIN', 'admin:config'),
+  ('MOSTRADOR', 'auth:login'),
+  ('MOSTRADOR', 'profile:view_own'),
+  ('MOSTRADOR', 'reservation:view_all'),
+  ('MOSTRADOR', 'reservation:confirm'),
+  ('MOSTRADOR', 'payment:process'),
+  ('MOSTRADOR', 'report:view_operational'),
+  ('PASAJERO', 'auth:login'),
+  ('PASAJERO', 'profile:view_own'),
+  ('PASAJERO', 'reservation:view_own'),
+  ('PASAJERO', 'reservation:create'),
+  ('PASAJERO', 'payment:register_method');
+
 -- -----------------------------------------------------------------------------
 -- Aeropuertos
 -- -----------------------------------------------------------------------------

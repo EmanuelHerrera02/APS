@@ -1,5 +1,6 @@
 import MainLayout from '../layouts/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
+import { Permissions } from '../../security/Authorization';
 
 export default function EmployeeDashboard() {
   const { user, permissions } = useAuth();
@@ -36,25 +37,25 @@ export default function EmployeeDashboard() {
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Permisos Operacionales</h3>
           <div className="space-y-2">
-            {permissions.includes('reservation:view_all') && (
+            {permissions.includes(Permissions.RESERVATION_VIEW_ALL) && (
               <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
                 <span>✅</span>
                 <span className="text-sm">Ver todas las reservas</span>
               </div>
             )}
-            {permissions.includes('reservation:confirm') && (
+            {permissions.includes(Permissions.RESERVATION_CONFIRM) && (
               <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
                 <span>✅</span>
                 <span className="text-sm">Confirmar reservas</span>
               </div>
             )}
-            {permissions.includes('payment:process') && (
+            {permissions.includes(Permissions.PAYMENT_PROCESS) && (
               <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
                 <span>✅</span>
                 <span className="text-sm">Procesar pagos</span>
               </div>
             )}
-            {permissions.includes('report:view_operational') && (
+            {permissions.includes(Permissions.REPORT_VIEW_OPERATIONAL) && (
               <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
                 <span>✅</span>
                 <span className="text-sm">Ver reportes operacionales</span>

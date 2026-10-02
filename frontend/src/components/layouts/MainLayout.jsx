@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { Permissions, Roles } from '../../security/Authorization';
 import './MainLayout.css';
 
 export default function MainLayout({ children }) {
@@ -25,7 +26,7 @@ export default function MainLayout({ children }) {
       label: 'Dashboard',
       path: '/dashboard',
       icon: '📊',
-      permission: 'auth:login',
+      permission: Permissions.AUTH_LOGIN,
       submenu: null,
     });
 
@@ -33,51 +34,51 @@ export default function MainLayout({ children }) {
       label: 'Mi Perfil',
       path: '/profile',
       icon: '👤',
-      permission: 'profile:view_own',
+      permission: Permissions.PROFILE_VIEW_OWN,
       submenu: null,
     });
 
     // MENÚ PASAJERO
-    if (hasRole('passenger')) {
+    if (hasRole(Roles.PASSENGER)) {
       items.push({
         label: 'Mis Reservas',
         path: '/passenger',
         icon: '🎫',
-        permission: 'reservation:view_own',
+        permission: Permissions.RESERVATION_VIEW_OWN,
         submenu: [
-          { label: 'Ver mis reservas', path: '/passenger/reservations', permission: 'reservation:view_own' },
-          { label: 'Nueva reserva', path: '/passenger/reservations/new', permission: 'reservation:create' },
+          { label: 'Ver mis reservas', path: '/passenger/reservations', permission: Permissions.RESERVATION_VIEW_OWN },
+          { label: 'Nueva reserva', path: '/passenger/reservations/new', permission: Permissions.RESERVATION_CREATE },
         ],
       });
     }
 
     // MENÚ EMPLEADO
-    if (hasRole('counter_employee')) {
+    if (hasRole(Roles.EMPLOYEE)) {
       items.push({
         label: 'Gestión',
         path: '/employee',
         icon: '⚙️',
-        permission: 'reservation:view_all',
+        permission: Permissions.RESERVATION_VIEW_ALL,
         submenu: [
-          { label: 'Todas las reservas', path: '/employee/reservations', permission: 'reservation:view_all' },
-          { label: 'Procesar pagos', path: '/employee/payments', permission: 'payment:process' },
-          { label: 'Reportes', path: '/employee/reports', permission: 'report:view_operational' },
+          { label: 'Todas las reservas', path: '/employee/reservations', permission: Permissions.RESERVATION_VIEW_ALL },
+          { label: 'Procesar pagos', path: '/employee/payments', permission: Permissions.PAYMENT_PROCESS },
+          { label: 'Reportes', path: '/employee/reports', permission: Permissions.REPORT_VIEW_OPERATIONAL },
         ],
       });
     }
 
     // MENÚ ADMIN
-    if (hasRole('admin')) {
+    if (hasRole(Roles.ADMIN)) {
       items.push({
         label: 'Administración',
         path: '/admin',
         icon: '🔧',
-        permission: 'admin:panel_access',
+        permission: Permissions.ADMIN_PANEL_ACCESS,
         submenu: [
-          { label: 'Panel de Control', path: '/admin/dashboard', permission: 'admin:panel_access' },
-          { label: 'Gestionar Usuarios', path: '/admin/users', permission: 'user:list' },
-          { label: 'Reportes Financieros', path: '/admin/reports', permission: 'report:view_financial' },
-          { label: 'Auditoría', path: '/admin/audit', permission: 'admin:view_audit' },
+          { label: 'Panel de Control', path: '/admin/dashboard', permission: Permissions.ADMIN_PANEL_ACCESS },
+          { label: 'Gestionar Usuarios', path: '/admin/users', permission: Permissions.USER_LIST },
+          { label: 'Reportes Financieros', path: '/admin/reports', permission: Permissions.REPORT_VIEW_FINANCIAL },
+          { label: 'Auditoría', path: '/admin/audit', permission: Permissions.ADMIN_VIEW_AUDIT },
         ],
       });
     }
@@ -94,9 +95,9 @@ export default function MainLayout({ children }) {
 
   const getRoleLabel = (roleName) => {
     const labels = {
-      passenger: '👤 Pasajero',
-      counter_employee: '💼 Empleado',
-      admin: '🔐 Administrador',
+      [Roles.PASSENGER]: '👤 Pasajero',
+      [Roles.EMPLOYEE]: '💼 Empleado',
+      [Roles.ADMIN]: '🔐 Administrador',
     };
     return labels[roleName] || roleName;
   };

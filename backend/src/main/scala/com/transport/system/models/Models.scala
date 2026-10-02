@@ -83,31 +83,39 @@ case class RegisterRequest(
   firstName: String,
   lastName: String,
   phone: Option[String],
-  role: String = "passenger"
+  role: String = "PASAJERO"
 )
 
 /**
  * Roles del sistema
  */
 object Roles {
-  val ADMIN = "admin"
-  val EMPLOYEE = "counter_employee"
-  val PASSENGER = "passenger"
+  val ADMIN = "ADMIN"
+  val EMPLOYEE = "MOSTRADOR"
+  val PASSENGER = "PASAJERO"
 }
 
 /**
  * Permisos del sistema
  */
 object Permissions {
-  val MANAGE_USERS = "manage_users"
-  val MANAGE_SYSTEM = "manage_system"
-  val MANAGE_TICKETS = "manage_tickets"
-  val VIEW_REPORTS = "view_reports"
-  val SELL_TICKETS = "sell_tickets"
-  val MANAGE_SCHEDULES = "manage_schedules"
-  val BOOK_TICKETS = "book_tickets"
-  val VIEW_HISTORY = "view_history"
-  val UPDATE_PROFILE = "update_profile"
+  val AUTH_LOGIN = "auth:login"
+  val PROFILE_VIEW_OWN = "profile:view_own"
+  val RESERVATION_VIEW_OWN = "reservation:view_own"
+  val RESERVATION_CREATE = "reservation:create"
+  val RESERVATION_VIEW_ALL = "reservation:view_all"
+  val RESERVATION_CONFIRM = "reservation:confirm"
+  val PAYMENT_PROCESS = "payment:process"
+  val PAYMENT_REGISTER_METHOD = "payment:register_method"
+  val REPORT_VIEW_OPERATIONAL = "report:view_operational"
+  val ADMIN_PANEL_ACCESS = "admin:panel_access"
+  val USER_LIST = "user:list"
+  val USER_CREATE = "user:create"
+  val USER_EDIT = "user:edit"
+  val USER_CHANGE_ROLE = "user:change_role"
+  val REPORT_VIEW_FINANCIAL = "report:view_financial"
+  val ADMIN_VIEW_AUDIT = "admin:view_audit"
+  val ADMIN_CONFIG = "admin:config"
 }
 
 /**
@@ -120,27 +128,36 @@ abstract class UserProfile {
 
 case class Administrador(user: User) extends UserProfile {
   val permissions = List(
-    Permissions.MANAGE_USERS,
-    Permissions.MANAGE_SYSTEM,
-    Permissions.MANAGE_TICKETS,
-    Permissions.VIEW_REPORTS,
-    Permissions.UPDATE_PROFILE
+    Permissions.AUTH_LOGIN,
+    Permissions.PROFILE_VIEW_OWN,
+    Permissions.ADMIN_PANEL_ACCESS,
+    Permissions.USER_LIST,
+    Permissions.USER_CREATE,
+    Permissions.USER_EDIT,
+    Permissions.USER_CHANGE_ROLE,
+    Permissions.REPORT_VIEW_FINANCIAL,
+    Permissions.ADMIN_VIEW_AUDIT,
+    Permissions.ADMIN_CONFIG
   )
 }
 
 case class EmpleadoMostrador(user: User) extends UserProfile {
   val permissions = List(
-    Permissions.SELL_TICKETS,
-    Permissions.MANAGE_SCHEDULES,
-    Permissions.VIEW_HISTORY,
-    Permissions.UPDATE_PROFILE
+    Permissions.AUTH_LOGIN,
+    Permissions.PROFILE_VIEW_OWN,
+    Permissions.RESERVATION_VIEW_ALL,
+    Permissions.RESERVATION_CONFIRM,
+    Permissions.PAYMENT_PROCESS,
+    Permissions.REPORT_VIEW_OPERATIONAL
   )
 }
 
 case class Pasajero(user: User) extends UserProfile {
   val permissions = List(
-    Permissions.BOOK_TICKETS,
-    Permissions.VIEW_HISTORY,
-    Permissions.UPDATE_PROFILE
+    Permissions.AUTH_LOGIN,
+    Permissions.PROFILE_VIEW_OWN,
+    Permissions.RESERVATION_VIEW_OWN,
+    Permissions.RESERVATION_CREATE,
+    Permissions.PAYMENT_REGISTER_METHOD
   )
 }

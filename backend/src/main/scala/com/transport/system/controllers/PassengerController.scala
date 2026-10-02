@@ -124,8 +124,8 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
     try {
       val userId = getUserIdFromRequest(request)
       
-      if (!hasPermission(request, Permissions.VIEW_HISTORY)) {
-        logAccessDenied(userId, "view_own_reservations", s"Missing permission: ${Permissions.VIEW_HISTORY}")
+      if (!hasPermission(request, Permissions.RESERVATION_VIEW_OWN)) {
+        logAccessDenied(userId, "view_own_reservations", s"Missing permission: ${Permissions.RESERVATION_VIEW_OWN}")
         Forbidden(Map("error" -> "No tienes permiso para ver tus reservas"))
       } else {
         logger.info(s"User $userId viewing their reservations")
@@ -150,8 +150,8 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasPermission(request, Permissions.BOOK_TICKETS)) {
-        logAccessDenied(userId, "create_reservation", s"Missing permission: ${Permissions.BOOK_TICKETS}")
+      if (!hasPermission(request, Permissions.RESERVATION_CREATE)) {
+        logAccessDenied(userId, "create_reservation", s"Missing permission: ${Permissions.RESERVATION_CREATE}")
         Forbidden(Map("error" -> "No tienes permiso para crear reservas"))
       } else {
         logger.info(s"User $userId creating new reservation")
@@ -176,8 +176,8 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
     try {
       val userId = getUserIdFromRequest(request)
 
-      if (!hasPermission(request, Permissions.UPDATE_PROFILE)) {
-        logAccessDenied(userId, "view_own_profile", s"Missing permission: ${Permissions.UPDATE_PROFILE}")
+      if (!hasPermission(request, Permissions.PROFILE_VIEW_OWN)) {
+        logAccessDenied(userId, "view_own_profile", s"Missing permission: ${Permissions.PROFILE_VIEW_OWN}")
         Forbidden(Map("error" -> "No tienes permiso para ver tu perfil"))
       } else {
         logger.info(s"User $userId viewing their profile")
