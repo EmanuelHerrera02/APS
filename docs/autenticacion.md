@@ -5,6 +5,7 @@ El backend expone estas rutas bajo `/auth`:
 | Método | Ruta | Uso |
 |---|---|---|
 | POST | `/auth/login` | Validar email, contraseña y estado activo; abrir sesión. |
+| POST | `/auth/register` | Crear una cuenta persistente de pasajero y abrir sesión. El rol no se acepta del cliente. |
 | POST | `/auth/refresh` | Rotar el refresh token y emitir un nuevo access token. |
 | POST | `/auth/logout` | Revocar la sesión identificada por el access token. |
 | GET | `/auth/me` | Verificar el access token y devolver roles/permisos vigentes. |
@@ -18,4 +19,6 @@ Configurar el backend con estas variables:
 - `AERONET_DB_PASSWORD`
 - `AERONET_JWT_SECRET`, secreto aleatorio de al menos 32 bytes
 
-`db/01_schema.sql` crea `sesion_usuario`. En una base ya existente, ejecutar su bloque `CREATE TABLE` antes de iniciar el backend. Los hashes de contraseña aceptados son bcrypt y Argon2; nunca se compara una contraseña en texto plano.
+`db/01_schema.sql` crea `sesion_usuario` y `auditoria`. En una base ya existente, ejecutar los bloques `CREATE TABLE` de ambas tablas antes de iniciar el backend. Los hashes de contraseña aceptados son bcrypt y Argon2; nunca se compara una contraseña en texto plano.
+
+El alta administrativa y las consultas/actualizaciones de usuarios están bajo `/admin/users` y requieren sus permisos correspondientes. Los permisos activos se leen de `rol_permiso` en cada autenticación de access token.

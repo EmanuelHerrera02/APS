@@ -80,6 +80,22 @@ CREATE TABLE sesion_usuario (
   CONSTRAINT chk_sesion_expiracion CHECK (expira_en > creada_en)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE auditoria (
+  id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  actor_usuario_id  BIGINT UNSIGNED NULL,
+  accion            VARCHAR(80) NOT NULL,
+  entidad           VARCHAR(80) NOT NULL,
+  entidad_id        BIGINT UNSIGNED NULL,
+  detalles          JSON NULL,
+  created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY ix_auditoria_fecha (created_at),
+  KEY ix_auditoria_actor (actor_usuario_id, created_at),
+  KEY ix_auditoria_entidad (entidad, entidad_id, created_at),
+  CONSTRAINT fk_auditoria_actor FOREIGN KEY (actor_usuario_id)
+    REFERENCES usuario (id) ON DELETE RESTRICT ON UPDATE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- -----------------------------------------------------------------------------
 -- permiso y rol_permiso: catálogo común para backend, frontend y base.
 -- Los códigos de rol deben coincidir con usuario.rol.

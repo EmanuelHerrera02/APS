@@ -2,6 +2,7 @@ package com.transport.system.controllers
 
 import com.transport.system.middleware.{AuthorizedAction, SecurityException}
 import com.transport.system.models.{Roles, Permissions}
+import com.transport.system.security.UserRepository
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import org.scalatra._
@@ -180,11 +181,10 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
         logAccessDenied(userId, "view_own_profile", s"Missing permission: ${Permissions.PROFILE_VIEW_OWN}")
         Forbidden(Map("error" -> "No tienes permiso para ver tu perfil"))
       } else {
-        logger.info(s"User $userId viewing their profile")
-        Ok(Map(
-          "message" -> "Perfil del usuario",
-          "userId" -> userId
-        ))
+        UserRepository.profile(userId.toLong) match {
+          case Some(profile) => Ok(Map("profile" -> profile))
+          case None => NotFound(Map("error" -> "No existe el usuario"))
+        }
       }
     } catch {
       case ex: Exception =>

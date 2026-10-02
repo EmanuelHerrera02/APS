@@ -1,35 +1,53 @@
+import { useEffect, useState } from 'react';
 import MainLayout from '../layouts/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
 import { Permissions } from '../../security/Authorization';
 
 export default function EmployeeDashboard() {
-  const { user, permissions } = useAuth();
+  const { user, permissions, request } = useAuth();
+  const [stats, setStats] = useState(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    request('/employee/reports')
+      .then((data) => { if (!cancelled) setStats(data.stats); })
+      .catch((loadError) => { if (!cancelled) setError(loadError.message); });
+    return () => { cancelled = true; };
+  }, [request]);
+
+  const shown = (value) => (stats ? value : '—');
+  const currency = (value) => new Intl.NumberFormat('es-AR', {
+    style: 'currency', currency: 'ARS', maximumFractionDigits: 0,
+  }).format(Number(value || 0));
 
   return (
     <MainLayout>
       <div className="space-y-6">
+        <h2 className="text-xl font-semibold text-gray-900">Operaciones de {user?.firstName || 'mostrador'}</h2>
+        {error && <p role="alert" className="text-sm text-red-700">No se pudieron cargar los indicadores: {error}</p>}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white rounded-lg shadow p-6">
             <div className="text-sm font-medium text-gray-600">Reservas Pendientes</div>
-            <div className="text-3xl font-bold text-orange-600 mt-2">0</div>
+            <div className="text-3xl font-bold text-orange-600 mt-2">{shown(stats?.pendingReservations)}</div>
             <div className="text-xs text-gray-500 mt-1">Por confirmar</div>
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
             <div className="text-sm font-medium text-gray-600">Pagos Procesados</div>
-            <div className="text-3xl font-bold text-green-600 mt-2">0</div>
+            <div className="text-3xl font-bold text-green-600 mt-2">{shown(stats?.paymentsToday)}</div>
             <div className="text-xs text-gray-500 mt-1">Hoy</div>
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
             <div className="text-sm font-medium text-gray-600">Ingresos Totales</div>
-            <div className="text-3xl font-bold text-purple-600 mt-2">$0</div>
+            <div className="text-3xl font-bold text-purple-600 mt-2">{shown(stats ? currency(stats.revenueThisMonth) : null)}</div>
             <div className="text-xs text-gray-500 mt-1">Este mes</div>
           </div>
 
           <div className="bg-white rounded-lg shadow p-6">
             <div className="text-sm font-medium text-gray-600">Usuarios Activos</div>
-            <div className="text-3xl font-bold text-blue-600 mt-2">0</div>
+            <div className="text-3xl font-bold text-blue-600 mt-2">{shown(stats?.activeUsers)}</div>
             <div className="text-xs text-gray-500 mt-1">En el sistema</div>
           </div>
         </div>

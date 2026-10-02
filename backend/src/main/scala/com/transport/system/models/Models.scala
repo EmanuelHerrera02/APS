@@ -50,7 +50,8 @@ case class LoginResponse(
   accessToken: String,
   refreshToken: String,
   user: User,
-  roles: List[Role]
+  roles: List[Role],
+  permissions: List[String] = Nil
 )
 
 /**
@@ -83,8 +84,25 @@ case class RegisterRequest(
   password: String,
   firstName: String,
   lastName: String,
-  phone: Option[String],
-  role: String = "PASAJERO"
+  phone: Option[String] = None
+)
+
+/** Alta administrativa: el rol solo se acepta en un endpoint protegido. */
+case class AdminCreateUserRequest(
+  email: String,
+  password: String,
+  firstName: String,
+  lastName: String,
+  phone: Option[String] = None,
+  role: String = Roles.PASSENGER
+)
+
+case class AdminUserUpdateRequest(
+  firstName: Option[String] = None,
+  lastName: Option[String] = None,
+  phone: Option[String] = None,
+  active: Option[Boolean] = None,
+  role: Option[String] = None
 )
 
 /**

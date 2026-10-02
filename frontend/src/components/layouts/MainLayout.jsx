@@ -71,7 +71,7 @@ export default function MainLayout({ children }) {
     if (hasRole(Roles.ADMIN)) {
       items.push({
         label: 'Administración',
-        path: '/admin',
+      path: '/admin/dashboard',
         icon: '🔧',
         permission: Permissions.ADMIN_PANEL_ACCESS,
         submenu: [

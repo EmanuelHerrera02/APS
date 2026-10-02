@@ -10,23 +10,23 @@ Esta lista recoge el alcance de primera etapa descrito por el responsable del pr
 
 ### Alta e inicio de sesion
 
-- [ ] Implementar el alta de usuarios y la autenticación (8 horas).
-- [ ] Dar de alta los usuarios en la base de datos al registrarlos, con validacion de datos y contrasena almacenada como hash.
-- [ ] Autenticar las credenciales cada vez que un usuario inicia sesion y rechazar cuentas deshabilitadas.
-- [ ] Al autenticar, actualizar el ultimo acceso y entregar una credencial de sesion verificable para las solicitudes autenticadas.
-- [ ] Restringir la asignacion de roles internos: el registro publico de pasajeros no debe permitir que el cliente se asigne rol de administrador o empleado.
+- [x] Implementar el alta de usuarios y la autenticación (8 horas).
+- [x] Dar de alta los usuarios en la base de datos al registrarlos, con validacion de datos y contrasena almacenada como hash.
+- [x] Autenticar las credenciales cada vez que un usuario inicia sesion y rechazar cuentas deshabilitadas.
+- [x] Al autenticar, actualizar el ultimo acceso y entregar una credencial de sesion verificable para las solicitudes autenticadas.
+- [x] Restringir la asignacion de roles internos: el registro publico de pasajeros no debe permitir que el cliente se asigne rol de administrador o empleado.
 
 ### Acceso por permisos
 
-- [ ] Implementar el control de acceso por perfil en la navegación (5 horas).
-- [ ] Al entrar y navegar por la plataforma, mostrar y proteger las pantallas segun rol y permisos.
-- [ ] Validar los permisos tambien en el backend en cada endpoint protegido; ocultar opciones en la interfaz no basta como control de acceso.
+- [x] Implementar el control de acceso por perfil en la navegación (5 horas).
+- [x] Al entrar y navegar por la plataforma, mostrar y proteger las pantallas segun rol y permisos.
+- [x] Validar los permisos tambien en el backend en cada endpoint protegido; ocultar opciones en la interfaz no basta como control de acceso.
 - [ ] Unificar los identificadores de roles y permisos usados por base de datos, backend y frontend.
 
 ### Integracion y estado funcional
 
 - [ ] Probar los accesos con usuarios de los tres perfiles (3 horas).
-- [ ] Conectar alta, login y autorizacion con persistencia real; reemplazar respuestas y datos de demostracion en estos flujos.
+- [x] Conectar alta, login y autorizacion con persistencia real; reemplazar respuestas y datos de demostracion en estos flujos.
 - [ ] Poder comprobar los flujos para los tres roles, incluyendo accesos permitidos y denegados.
 
 ## US7 — Búsqueda de viajes

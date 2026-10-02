@@ -1,6 +1,6 @@
 package com.transport.system.security
 
-import com.password4j.Password
+import com.password4j.{Argon2Function, Password}
 import com.transport.system.models.{LoginResponse, Role, User}
 import java.nio.charset.StandardCharsets
 import java.security.{MessageDigest, SecureRandom}
@@ -31,9 +31,10 @@ object Authentication {
   private def secret: Array[Byte] = {
     val value = setting("AERONET_JWT_SECRET")
     val bytes = value.getBytes(StandardCharsets.UTF_8)
-    require(bytes.length >= 32, "AERONET_JWT_SECRET must contain at least 32 bytes")
+    if (bytes.length < 32) throw new IllegalStateException("AERONET_JWT_SECRET must contain at least 32 bytes")
     bytes
   }
+  def validateConfiguration(): Unit = { secret; () }
   private def hash(value: String): String = MessageDigest.getInstance("SHA-256")
     .digest(value.getBytes(StandardCharsets.UTF_8)).map(b => f"${b & 0xff}%02x").mkString
   private def randomToken(): String = {
@@ -94,9 +95,8 @@ object Authentication {
         else {
           val storedHash = rs.getString("password_hash")
           val valid = try {
-            val checker = Password.check(password, storedHash)
-            if (storedHash.startsWith("$2")) checker.withBcrypt()
-            else if (storedHash.startsWith("$argon2")) checker.withArgon2()
+            if (storedHash.startsWith("$2")) Password.check(password, storedHash).withBcrypt()
+            else if (storedHash.startsWith("$argon2")) Argon2Function.getInstanceFromHash(storedHash).check(password, storedHash)
             else false
           } catch { case _: Exception => false }
           if (!valid) { connection.rollback(); None }
@@ -119,12 +119,13 @@ object Authentication {
             insert.setString(1, sessionId); insert.setLong(2, userId); insert.setString(3, hash(refresh))
             insert.executeUpdate(); insert.close()
             val (_, permissions) = identity(connection, userId)
+            UserRepository.writeAudit(connection, Some(userId), "auth.login", "sesion", None, None)
             connection.commit()
             val roleId = Map("PASAJERO" -> 1, "MOSTRADOR" -> 2, "ADMIN" -> 3).getOrElse(roleName, 0)
             Some(LoginResponse(
               issueAccess(userId, userEmail, List(roleName), permissions, sessionId), refresh,
               User(userId.toInt, userEmail, firstName, lastName, phone, "ACTIVE", created, Some(now)),
-              List(Role(roleId, roleName, roleName))))
+              List(Role(roleId, roleName, roleName)), permissions))
           }
         }
       } finally { rs.close(); query.close() }
@@ -185,18 +186,24 @@ object Authentication {
           val (_, permissions) = identity(connection, userId); connection.commit()
           Some(LoginResponse(issueAccess(userId, email, List(role), permissions, sessionId), replacement,
             User(userId.toInt, email, first, last, phone, "ACTIVE", created, lastLogin),
-            List(Role(Map("PASAJERO" -> 1, "MOSTRADOR" -> 2, "ADMIN" -> 3).getOrElse(role, 0), role, role))))
+            List(Role(Map("PASAJERO" -> 1, "MOSTRADOR" -> 2, "ADMIN" -> 3).getOrElse(role, 0), role, role)), permissions))
         }
       } finally { rs.close(); stmt.close() }
     } catch { case ex: Throwable => connection.rollback(); throw ex }
     finally connection.close()
   }
 
-  def logout(sessionId: String): Unit = {
+  def logout(sessionId: String, userId: Long): Unit = {
     val connection = db()
     try {
+      connection.setAutoCommit(false)
       val stmt = connection.prepareStatement("UPDATE sesion_usuario SET revocada_en=UTC_TIMESTAMP() WHERE id=? AND revocada_en IS NULL")
-      stmt.setString(1, sessionId); stmt.executeUpdate(); stmt.close()
-    } finally connection.close()
+      stmt.setString(1, sessionId)
+      val changed = stmt.executeUpdate()
+      stmt.close()
+      if (changed > 0) UserRepository.writeAudit(connection, Some(userId), "auth.logout", "sesion", None, None)
+      connection.commit()
+    } catch { case ex: Throwable => connection.rollback(); throw ex }
+    finally connection.close()
   }
 }

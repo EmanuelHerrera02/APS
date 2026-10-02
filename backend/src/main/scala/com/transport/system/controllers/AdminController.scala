@@ -1,7 +1,8 @@
 package com.transport.system.controllers
 
 import com.transport.system.middleware.AuthorizedAction
-import com.transport.system.models.{Roles, Permissions}
+import com.transport.system.models.{AdminCreateUserRequest, AdminUserUpdateRequest, Roles, Permissions}
+import com.transport.system.security.{UserRepository, UserWriteError}
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import org.scalatra._
@@ -31,11 +32,7 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
         Ok(Map(
           "message" -> "Panel de Administración",
           "userId" -> userId,
-          "stats" -> Map(
-            "totalUsers" -> 0,
-            "totalReservations" -> 0,
-            "totalRevenue" -> 0
-          )
+          "stats" -> UserRepository.adminStats()
         ))
       }
     } catch {
@@ -58,10 +55,7 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
         Forbidden(Map("error" -> "No tienes permiso para listar usuarios"))
       } else {
         logger.info(s"Admin $userId listing users")
-        Ok(Map(
-          "message" -> "Usuarios del sistema",
-          "users" -> List()
-        ))
+        Ok(Map("message" -> "Usuarios del sistema", "users" -> UserRepository.listUsers()))
       }
     } catch {
       case ex: Exception =>
@@ -82,17 +76,27 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
         logAccessDenied(userId, "create_user", s"Missing permission: ${Permissions.USER_CREATE}")
         Forbidden(Map("error" -> "No tienes permiso para crear usuarios"))
       } else {
-        logger.info(s"Admin $userId creating new user")
-        val body = parsedBody
-        Ok(Map(
-          "message" -> "Usuario creado exitosamente",
-          "userId" -> 1
-        ))
+        val input = parsedBody.extract[AdminCreateUserRequest]
+        if (input.role != Roles.PASSENGER && !hasPermission(request, Permissions.USER_CHANGE_ROLE)) {
+          logAccessDenied(userId, "create_user_with_internal_role", s"Missing permission: ${Permissions.USER_CHANGE_ROLE}")
+          Forbidden(Map("error" -> "No tienes permiso para asignar roles internos"))
+        } else {
+          UserRepository.createByAdministrator(userId.toLong, input.email, input.password, input.firstName, input.lastName,
+            input.phone, input.role) match {
+            case Right(createdUserId) =>
+              logger.info(s"Admin $userId created user $createdUserId")
+              Created(Map("message" -> "Usuario creado exitosamente", "userId" -> createdUserId))
+            case Left(UserWriteError.InvalidData) => BadRequest(Map("error" -> "Los datos del usuario no son válidos"))
+            case Left(UserWriteError.EmailAlreadyExists) => Conflict(Map("error" -> "Ya existe una cuenta con ese email"))
+            case Left(UserWriteError.InvalidRole) => BadRequest(Map("error" -> "El rol indicado no es válido"))
+          }
+        }
       }
     } catch {
+      case _: MappingException => BadRequest(Map("error" -> "El cuerpo de la solicitud no es válido"))
       case ex: Exception =>
         logger.error("Error creating user", ex)
-        BadRequest(Map("error" -> "Error al crear usuario"))
+        InternalServerError(Map("error" -> "Error al crear usuario"))
     }
   }
 
@@ -103,22 +107,30 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
   put("/users/:id") {
     try {
       val userId = getUserIdFromRequest(request)
-      val targetUserId = params("id")
+      val targetUserId = params("id").toLong
 
       if (!hasPermission(request, Permissions.USER_EDIT)) {
         logAccessDenied(userId, s"edit_user_$targetUserId", s"Missing permission: ${Permissions.USER_EDIT}")
         Forbidden(Map("error" -> "No tienes permiso para editar usuarios"))
       } else {
-        logger.info(s"Admin $userId editing user $targetUserId")
-        Ok(Map(
-          "message" -> "Usuario actualizado",
-          "userId" -> targetUserId
-        ))
+        val input = parsedBody.extract[AdminUserUpdateRequest]
+        if (input.role.isDefined && !hasPermission(request, Permissions.USER_CHANGE_ROLE)) {
+          logAccessDenied(userId, s"change_role_$targetUserId", s"Missing permission: ${Permissions.USER_CHANGE_ROLE}")
+          Forbidden(Map("error" -> "No tienes permiso para cambiar roles"))
+        } else if (targetUserId == userId && (input.active.contains(false) || input.role.exists(role => !role.equalsIgnoreCase(Roles.ADMIN)))) {
+          BadRequest(Map("error" -> "No podés desactivar tu cuenta ni quitarte el rol de administrador"))
+        } else if (UserRepository.updateUser(userId.toLong, targetUserId, input.firstName, input.lastName, input.phone,
+          input.active, input.role)) {
+          Ok(Map("message" -> "Usuario actualizado", "userId" -> targetUserId))
+        } else NotFound(Map("error" -> "No existe el usuario indicado"))
       }
     } catch {
+      case _: MappingException => BadRequest(Map("error" -> "El cuerpo de la solicitud no es válido"))
+      case _: NumberFormatException => BadRequest(Map("error" -> "El id de usuario no es válido"))
+      case ex: IllegalArgumentException => BadRequest(Map("error" -> ex.getMessage))
       case ex: Exception =>
         logger.error("Error editing user", ex)
-        BadRequest(Map("error" -> "Error al editar usuario"))
+        InternalServerError(Map("error" -> "Error al editar usuario"))
     }
   }
 
@@ -135,10 +147,7 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
         Forbidden(Map("error" -> "No tienes permiso para ver reportes financieros"))
       } else {
         logger.info(s"Admin $userId viewing financial reports")
-        Ok(Map(
-          "message" -> "Reportes Financieros",
-          "reports" -> List()
-        ))
+        Ok(Map("reports" -> UserRepository.financialReports()))
       }
     } catch {
       case ex: Exception =>
@@ -160,10 +169,7 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
         Forbidden(Map("error" -> "No tienes permiso para ver la auditoría"))
       } else {
         logger.info(s"Admin $userId viewing audit logs")
-        Ok(Map(
-          "message" -> "Auditoría del Sistema",
-          "logs" -> List()
-        ))
+        Ok(Map("logs" -> UserRepository.auditEntries()))
       }
     } catch {
       case ex: Exception =>

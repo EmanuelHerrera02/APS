@@ -2,6 +2,7 @@ package com.transport.system.controllers
 
 import com.transport.system.middleware.AuthorizedAction
 import com.transport.system.models.{Roles, Permissions}
+import com.transport.system.security.UserRepository
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import org.scalatra._
@@ -105,10 +106,7 @@ class EmployeeController extends ScalatraServlet with JacksonJsonSupport with Au
         Forbidden(Map("error" -> "No tienes permiso para ver reportes"))
       } else {
         logger.info(s"Employee $userId viewing operational reports")
-        Ok(Map(
-          "message" -> "Reportes operacionales",
-          "reports" -> List()
-        ))
+        Ok(Map("stats" -> UserRepository.employeeStats()))
       }
     } catch {
       case ex: Exception =>
