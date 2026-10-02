@@ -64,6 +64,22 @@ CREATE TABLE usuario (
     CHECK ((tipo_documento IS NULL) = (numero_documento IS NULL))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Sesiones de autenticación: el refresh token se conserva únicamente como SHA-256.
+CREATE TABLE sesion_usuario (
+  id             CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  usuario_id     BIGINT UNSIGNED NOT NULL,
+  refresh_hash   CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  creada_en      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expira_en      DATETIME NOT NULL,
+  revocada_en    DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_sesion_refresh_hash (refresh_hash),
+  KEY ix_sesion_usuario_activa (usuario_id, revocada_en, expira_en),
+  CONSTRAINT fk_sesion_usuario FOREIGN KEY (usuario_id)
+    REFERENCES usuario (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT chk_sesion_expiracion CHECK (expira_en > creada_en)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- -----------------------------------------------------------------------------
 -- permiso y rol_permiso: catálogo común para backend, frontend y base.
 -- Los códigos de rol deben coincidir con usuario.rol.

@@ -63,7 +63,8 @@ case class JwtPayload(
   roles: List[String],
   permissions: List[String],
   iat: Long,
-  exp: Long
+  exp: Long,
+  sessionId: String = ""
 )
 
 /**
