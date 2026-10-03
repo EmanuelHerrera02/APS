@@ -1,6 +1,6 @@
 ---
 name: seguimiento-implementacion
-description: Compara las tareas descritas en Skills/tareas.md con el codigo del repositorio y actualiza Skills/faltantes.md con lo que sigue pendiente y lo que ya se verifico.
+description: Compara Skills/tareas.md con el codigo del repositorio y mantiene Skills/faltantes.md limitado a tareas pendientes, parciales o no verificables.
 ---
 
 # Seguimiento de implementacion
@@ -17,8 +17,10 @@ Usa esta Skill cuando haya que revisar el avance del proyecto frente a su lista 
 1. Lee ambos archivos y las instrucciones locales del repositorio (`AGENTS.md`, si existe).
 2. Recorre los archivos fuente, configuracion, documentacion y pruebas pertinentes a las tareas. No des por implementado algo solo porque aparezca en un comentario, modelo de datos o documento.
 3. Para cada tarea, determina si esta **completa**, **parcial** o **pendiente** con evidencia verificable. Distingue codigo real de stubs, placeholders y propuestas documentadas.
-4. Actualiza `../faltantes.md` para que refleje el estado actual: fecha de revision, tareas pendientes o parciales, evidencia con rutas de archivo y una seccion breve de lo comprobado como completo. Retira pendientes que ya no aplican y conserva los que no se hayan resuelto.
+4. Actualiza `../faltantes.md` para que contenga solo tareas pendientes, parciales o no verificables, con fecha de revision y evidencia accionable. Cuando una tarea ya estaba completa o queda completa durante la revision, elimínala de `faltantes.md`; no la conserves en una seccion de tareas completadas ni como pendiente resuelto. Retira tambien pendientes que ya no aplican y conserva los que sigan sin resolver.
 5. Si falta informacion o codigo para confirmar algo, indicalo como no verificable; no inventes el comportamiento ni cambies el requisito para hacerlo parecer completo.
+
+Si no queda ninguna tarea pendiente, parcial o no verificable dentro del alcance revisado, reemplaza el contenido del informe por una nota breve indicando que no hay faltantes pendientes; no enumeres las tareas completadas.
 
 ## Limites
 

@@ -109,8 +109,7 @@ class AuthController extends ScalatraServlet with JacksonJsonSupport {
       case None => Unauthorized(Map("error" -> "Sesión inválida o expirada"))
       case Some(authenticated) =>
         val roles = authenticated.roles.map { role =>
-          Map("id" -> Map("PASAJERO" -> 1, "MOSTRADOR" -> 2, "ADMIN" -> 3).getOrElse(role, 0),
-            "name" -> role, "description" -> role)
+          Map("id" -> role, "name" -> role, "description" -> role)
         }
         UserRepository.profile(authenticated.userId.toLong) match {
           case Some(user) => Ok(Map("user" -> user, "roles" -> roles, "permissions" -> authenticated.permissions))

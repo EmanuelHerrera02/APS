@@ -4,9 +4,9 @@ Esta lista recoge el alcance de primera etapa descrito por el responsable del pr
 
 ## US4 — Acceso por roles y permisos
 
-- [ ] Diseñar el esquema de roles y permisos de los tres perfiles (4 horas).
-- [ ] Implementar los tres roles: administrador (`ADMIN`), pasajero (`PASAJERO`) y empleado de mostrador (`MOSTRADOR`).
-- [ ] Definir y mantener una asignacion coherente de permisos para cada rol en las capas que los consumen.
+- [x] Diseñar el esquema de roles y permisos de los tres perfiles (4 horas).
+- [x] Implementar los tres roles: administrador (`ADMIN`), pasajero (`PASAJERO`) y empleado de mostrador (`MOSTRADOR`).
+- [x] Definir y mantener una asignacion coherente de permisos para cada rol en las capas que los consumen.
 
 ### Alta e inicio de sesion
 
@@ -21,13 +21,13 @@ Esta lista recoge el alcance de primera etapa descrito por el responsable del pr
 - [x] Implementar el control de acceso por perfil en la navegación (5 horas).
 - [x] Al entrar y navegar por la plataforma, mostrar y proteger las pantallas segun rol y permisos.
 - [x] Validar los permisos tambien en el backend en cada endpoint protegido; ocultar opciones en la interfaz no basta como control de acceso.
-- [ ] Unificar los identificadores de roles y permisos usados por base de datos, backend y frontend.
+- [x] Unificar los identificadores de roles y permisos usados por base de datos, backend y frontend.
 
 ### Integracion y estado funcional
 
-- [ ] Probar los accesos con usuarios de los tres perfiles (3 horas).
+- [x] Probar los accesos con usuarios de los tres perfiles (3 horas).
 - [x] Conectar alta, login y autorizacion con persistencia real; reemplazar respuestas y datos de demostracion en estos flujos.
-- [ ] Poder comprobar los flujos para los tres roles, incluyendo accesos permitidos y denegados.
+- [x] Poder comprobar los flujos para los tres roles, incluyendo accesos permitidos y denegados.
 
 ## US7 — Búsqueda de viajes
 

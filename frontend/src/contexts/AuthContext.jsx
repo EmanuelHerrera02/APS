@@ -100,7 +100,9 @@ export function AuthProvider({ children }) {
       try {
         let token = localStorage.getItem(ACCESS_KEY);
         if (!token) return;
-        let response = await fetch(`${apiUrl}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+        let response = await fetch(`${apiUrl}/auth/me`, {
+          headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+        });
         if (response.status === 401) {
           const refreshToken = localStorage.getItem(REFRESH_KEY);
           if (!refreshToken) throw new Error('Sesión vencida');
@@ -113,7 +115,9 @@ export function AuthProvider({ children }) {
           if (cancelled) return;
           acceptSession(refreshed);
           token = refreshed.accessToken;
-          response = await fetch(`${apiUrl}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+          response = await fetch(`${apiUrl}/auth/me`, {
+            headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+          });
         }
         const session = await readResponse(response);
         if (!cancelled) acceptSession(session);

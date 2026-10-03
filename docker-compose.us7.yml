@@ -1,0 +1,10 @@
+# Instancia aislada para preparar y ejecutar las pruebas HTTP de US7.
+# Uso: docker compose -f docker-compose.yml -f docker-compose.us7.yml -p aeronet-us7 up -d db
+services:
+  db:
+    container_name: aeronet-us7-db
+    volumes:
+      - aeronet-us7-data:/var/lib/mysql
+
+volumes:
+  aeronet-us7-data:
