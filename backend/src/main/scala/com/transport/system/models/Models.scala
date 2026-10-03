@@ -20,7 +20,7 @@ case class User(
  * Modelo de Rol
  */
 case class Role(
-  id: Int,
+  id: String,
   name: String,
   description: String
 )
@@ -105,6 +105,25 @@ case class AdminUserUpdateRequest(
   role: Option[String] = None
 )
 
+case class FlightClassRequest(
+  className: String,
+  capacity: Int,
+  price: BigDecimal
+)
+
+case class AdminCreateFlightRequest(
+  code: String,
+  originAirportId: Long,
+  destinationAirportId: Long,
+  departureTime: String,
+  arrivalTime: String,
+  arrivalDayOffset: Int = 0,
+  startDate: String,
+  endDate: String,
+  operatingDays: List[Int],
+  classes: List[FlightClassRequest]
+)
+
 /**
  * Roles del sistema
  */
@@ -135,6 +154,7 @@ object Permissions {
   val REPORT_VIEW_FINANCIAL = "report:view_financial"
   val ADMIN_VIEW_AUDIT = "admin:view_audit"
   val ADMIN_CONFIG = "admin:config"
+  val FLIGHT_CREATE = "flight:create"
 }
 
 /**
@@ -156,7 +176,8 @@ case class Administrador(user: User) extends UserProfile {
     Permissions.USER_CHANGE_ROLE,
     Permissions.REPORT_VIEW_FINANCIAL,
     Permissions.ADMIN_VIEW_AUDIT,
-    Permissions.ADMIN_CONFIG
+    Permissions.ADMIN_CONFIG,
+    Permissions.FLIGHT_CREATE
   )
 }
 

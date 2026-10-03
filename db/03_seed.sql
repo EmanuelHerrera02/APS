@@ -32,7 +32,8 @@ INSERT INTO permiso (codigo, descripcion) VALUES
   ('user:change_role', 'Cambiar roles de usuarios'),
   ('report:view_financial', 'Ver reportes financieros'),
   ('admin:view_audit', 'Ver auditoría'),
-  ('admin:config', 'Configurar el sistema');
+  ('admin:config', 'Configurar el sistema'),
+  ('flight:create', 'Crear vuelos');
 
 INSERT INTO rol_permiso (rol, permiso_codigo) VALUES
   ('ADMIN', 'auth:login'),
@@ -45,6 +46,7 @@ INSERT INTO rol_permiso (rol, permiso_codigo) VALUES
   ('ADMIN', 'report:view_financial'),
   ('ADMIN', 'admin:view_audit'),
   ('ADMIN', 'admin:config'),
+  ('ADMIN', 'flight:create'),
   ('MOSTRADOR', 'auth:login'),
   ('MOSTRADOR', 'profile:view_own'),
   ('MOSTRADOR', 'reservation:view_all'),

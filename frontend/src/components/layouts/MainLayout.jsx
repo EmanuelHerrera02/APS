@@ -77,6 +77,8 @@ export default function MainLayout({ children }) {
         submenu: [
           { label: 'Panel de Control', path: '/admin/dashboard', permission: Permissions.ADMIN_PANEL_ACCESS },
           { label: 'Gestionar Usuarios', path: '/admin/users', permission: Permissions.USER_LIST },
+          { label: 'Alta de vuelo', path: '/admin/flights/new', permission: Permissions.FLIGHT_CREATE },
+          { label: 'Pruebas de alta', path: '/admin/flights/test', permission: Permissions.FLIGHT_CREATE },
           { label: 'Reportes Financieros', path: '/admin/reports', permission: Permissions.REPORT_VIEW_FINANCIAL },
           { label: 'Auditoría', path: '/admin/audit', permission: Permissions.ADMIN_VIEW_AUDIT },
         ],

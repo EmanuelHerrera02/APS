@@ -7,6 +7,8 @@ import PassengerDashboard from './components/passenger/PassengerDashboard';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AdminUsersPage from './pages/AdminUsersPage';
+import AdminFlightsPage from './pages/AdminFlightsPage';
+import AdminFlightTestPage from './pages/AdminFlightTestPage';
 import ProfilePage from './pages/ProfilePage';
 
 function HomeRedirect() {
@@ -43,6 +45,8 @@ export default function App() {
       <Route path="/forbidden" element={<ForbiddenPage />} />
       <Route path="/admin/dashboard" element={<ProtectedRoute permission={Permissions.ADMIN_PANEL_ACCESS}><AdminDashboard /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute permission={Permissions.USER_LIST}><AdminUsersPage /></ProtectedRoute>} />
+      <Route path="/admin/flights/new" element={<ProtectedRoute permission={Permissions.FLIGHT_CREATE}><AdminFlightsPage /></ProtectedRoute>} />
+      <Route path="/admin/flights/test" element={<ProtectedRoute permission={Permissions.FLIGHT_CREATE}><AdminFlightTestPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute permission={Permissions.PROFILE_VIEW_OWN}><ProfilePage /></ProtectedRoute>} />
       <Route path="/employee" element={<ProtectedRoute permission={Permissions.REPORT_VIEW_OPERATIONAL}><EmployeeDashboard /></ProtectedRoute>} />
       <Route path="/employee/reports" element={<ProtectedRoute permission={Permissions.REPORT_VIEW_OPERATIONAL}><EmployeeDashboard /></ProtectedRoute>} />

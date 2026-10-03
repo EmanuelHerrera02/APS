@@ -121,11 +121,10 @@ object Authentication {
             val (_, permissions) = identity(connection, userId)
             UserRepository.writeAudit(connection, Some(userId), "auth.login", "sesion", None, None)
             connection.commit()
-            val roleId = Map("PASAJERO" -> 1, "MOSTRADOR" -> 2, "ADMIN" -> 3).getOrElse(roleName, 0)
             Some(LoginResponse(
               issueAccess(userId, userEmail, List(roleName), permissions, sessionId), refresh,
               User(userId.toInt, userEmail, firstName, lastName, phone, "ACTIVE", created, Some(now)),
-              List(Role(roleId, roleName, roleName)), permissions))
+              List(Role(roleName, roleName, roleName)), permissions))
           }
         }
       } finally { rs.close(); query.close() }
@@ -186,7 +185,7 @@ object Authentication {
           val (_, permissions) = identity(connection, userId); connection.commit()
           Some(LoginResponse(issueAccess(userId, email, List(role), permissions, sessionId), replacement,
             User(userId.toInt, email, first, last, phone, "ACTIVE", created, lastLogin),
-            List(Role(Map("PASAJERO" -> 1, "MOSTRADOR" -> 2, "ADMIN" -> 3).getOrElse(role, 0), role, role)), permissions))
+            List(Role(role, role, role)), permissions))
         }
       } finally { rs.close(); stmt.close() }
     } catch { case ex: Throwable => connection.rollback(); throw ex }

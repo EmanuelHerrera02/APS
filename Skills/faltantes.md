@@ -1,27 +1,33 @@
-# Tareas pendientes — US4 y US7
+# Seguimiento de tareas — US2, US4, US5 y US7
 
-**Revisión:** 2026-10-02 · Comparación de [tareas.md](tareas.md) con el código disponible.
+**Revisión:** 2026-10-03 · Comparación de `Skills/tareas.md` con código, SQL, documentación, configuración y verificaciones disponibles.
 
-## Pendiente
+## Pendiente / parcial / no verificable
 
-### US4 — Roles y permisos
+### US4 — Acceso por roles y permisos
 
-- Ejecutar verificación integrada de registro, login, renovación/revocación y accesos permitidos/denegados con la base de datos disponible.
+- **Pendiente de pruebas integradas:** comprobar con usuarios ADMIN, PASAJERO y MOSTRADOR el alta, login, refresh, logout y accesos permitidos/denegados. El backend compila, pero no tiene launcher/servidor servlet ni pruebas automatizadas.
+- **Parcial — unificación de identificadores:** los nombres de roles y códigos de permisos coinciden entre SQL, Scala y frontend. Sin embargo, el backend sintetiza IDs numéricos de rol (`Authentication.scala`) que no existen como IDs en el esquema SQL; las tareas de diseño/unificación de roles continúan sin marcar en `tareas.md`.
+
+### US5 — Alta de vuelos
+
+- **Parcial — implementación:** hay formulario, validación cliente/servidor, endpoint protegido, transacción de persistencia, generación de salidas y auditoría. `npm run build` y compilación Scala pasan. No se pudo verificar visualmente ni por HTTP: el backend no tiene launcher y Vite en desarrollo devuelve 404 con error de acceso al recorrer directorios.
+- **Pendiente de validación backend:** `FlightRepository` no rechaza explícitamente precios con más de dos decimales, aunque el formulario sí los limita. Sus errores SQL de integridad distintos de duplicado se clasifican genéricamente como aeropuerto inválido.
+- **Resuelto — compatibilidad de permisos:** `db/05_migration_flight_create_permission.sql` agrega `flight:create` a bases existentes de forma idempotente; debe ejecutarse una vez después de actualizar el repositorio.
+- **Pendiente de pruebas integradas:** probar el endpoint HTTP con alta válida/inválida, acceso denegado y rollback del repositorio. Las pruebas SQL existentes no invocan `FlightRepository` ni el endpoint.
+- **Lint pendiente:** no existe ESLint declarado ni configuración en el proyecto; `npm run lint` no arranca.
 
 ### US7 — Búsqueda de viajes
 
-- Completar la configuración ejecutable del backend para conectar y montar `GET /passenger/search`. La ruta y consulta están escritas, pero faltan build del backend, dependencia JDBC y arranque/montaje verificables: [PassengerController.scala](../backend/src/main/scala/com/transport/system/controllers/PassengerController.scala).
-- Ejecutar pruebas de integración para rutas y fechas con resultados, sin resultados y sin asientos disponibles. La base ya tiene `v_disponibilidad`, pero [04_tests.sql](../db/04_tests.sql) no prueba la búsqueda y no se pudo ejecutar la app.
+- **Pendiente de pruebas integradas:** comprobar rutas y rangos con resultados, sin resultados y salidas agotadas. `db/04_tests.sql` no cubre `v_disponibilidad` ni `/passenger/search`.
+- **No verificable en ejecución:** el endpoint está implementado, pero no se pudo iniciar el backend por falta de launcher/servidor servlet.
 
-## Implementado en código
+## Comprobado en código y verificaciones
 
-- **US4:** códigos de rol alineados con `usuario.rol`; catálogo y asignaciones de permisos en SQL, con los mismos códigos en Scala y frontend ([01_schema.sql](../db/01_schema.sql), [03_seed.sql](../db/03_seed.sql), [Models.scala](../backend/src/main/scala/com/transport/system/models/Models.scala), [Authorization.js](../frontend/src/security/Authorization.js)).
-- **US4:** registro persistente con hash Argon2 y rol público fijo de pasajero; gestión administrativa persistente de usuarios; login con validación de contraseña bcrypt/Argon2 y cuenta activa, actualización de `ultimo_acceso`, token firmado, refresh rotativo y revocación/verificación de sesión ([AuthController.scala](../backend/src/main/scala/com/transport/system/controllers/AuthController.scala), [Authentication.scala](../backend/src/main/scala/com/transport/system/security/Authentication.scala), [UserRepository.scala](../backend/src/main/scala/com/transport/system/security/UserRepository.scala), [01_schema.sql](../db/01_schema.sql)).
-- **US4:** permisos leídos de la base de datos, protección de rutas frontend y endpoints, paneles con indicadores persistidos y auditoría de altas, cambios e inicio/cierre de sesión ([AuthContext.jsx](../frontend/src/contexts/AuthContext.jsx), [App.jsx](../frontend/src/App.jsx), [AdminController.scala](../backend/src/main/scala/com/transport/system/controllers/AdminController.scala)).
-- **US7:** formulario y diseño adaptable con estados de validación, carga, error y sin resultados ([PassengerDashboard.jsx](../frontend/src/components/passenger/PassengerDashboard.jsx), [PassengerDashboard.css](../frontend/src/components/passenger/PassengerDashboard.css)).
-- **US7:** presentación de fecha, vuelo, horarios, clases, precios y asientos; queda pendiente verificarla conectada al backend.
-- **Base de datos:** `v_disponibilidad` reúne los datos requeridos y excluye salidas canceladas o pasadas ([01_schema.sql](../db/01_schema.sql)).
-
-## Verificación pendiente
-
-No se ejecutaron pruebas en esta tarea. La verificación integrada requiere MariaDB con el esquema actualizado; el build del frontend requiere instalar las dependencias del proyecto (`vite` no está disponible en `node_modules`).
+- **US2 — Modelo y base de datos (completado según el alcance confirmado):** restricciones, estados, scripts iniciales y modelo están en `db/01_schema.sql` a `db/04_tests.sql`; `docker-compose.yml` carga la base de desarrollo.
+- **US4 — Alta y sesión:** registro con rol PASAJERO, hash de contraseña, login, actualización de último acceso, credenciales de sesión y control de permisos en frontend/backend (`AuthController.scala`, `Authentication.scala`, `AuthorizedAction.scala`, controladores y `AuthContext.jsx`). La verificación integrada sigue pendiente.
+- **US5 — Código de alta:** `AdminFlightsPage.jsx` captura código, ruta, horarios, período, días, clases, capacidades y precios. `AdminController.scala` expone `GET /admin/airports` y `POST /admin/flights`; `FlightRepository.scala` valida y guarda vuelo, días y clases en una transacción, genera salidas y registra auditoría. `flight:create` está alineado en SQL, Scala y frontend.
+- **US7 — Búsqueda en código:** formulario, estados de carga/error/sin resultados y resultados están en `PassengerDashboard.jsx`; `/passenger/search` consulta `v_disponibilidad` en `PassengerController.scala`.
+- `sbt test` compila el backend, pero reporta 0 pruebas configuradas. `npm run build` pasa con Vite 4.5.14.
+- `db/04_tests.sql` pasó **26/26 casos** al ejecutarse desde el archivo UTF-8 montado en MariaDB. Se verificó que ADMIN tiene `flight:create` y los otros roles no; una inserción con código repetido fue rechazada por `uq_vuelo_codigo`.
+- Una transacción SQL de humo generó 7 salidas y 14 clases y confirmó rollback total. Esto verifica la base y `generar_salidas`, no la llamada desde `FlightRepository`.

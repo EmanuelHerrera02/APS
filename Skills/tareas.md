@@ -35,3 +35,30 @@ Esta lista recoge el alcance de primera etapa descrito por el responsable del pr
 - [ ] Implementar la consulta por origen, destino y fechas (6 horas).
 - [ ] Mostrar horarios, clases, precios y disponibilidad de cada opción (4 horas).
 - [ ] Probar la búsqueda con distintos criterios y casos sin resultados (3 horas).
+
+## US5 — Alta de vuelos
+
+- [ ] Diseñar el formulario de alta de vuelo (4 horas).
+  - Definir campos: código, aeropuertos, horarios, desfase de llegada, período, días de operación y clases.
+  - Organizar el formulario por ruta y horario, período, días y capacidad/precio por clase.
+  - Incluir estados accesibles de carga, error y confirmación.
+- [ ] Implementar las validaciones de los datos (días, horarios, período de venta, capacidades y precios) (6 horas).
+  - Validar campos obligatorios, formato del código y selección de aeropuertos distintos.
+  - Validar días, fechas, horarios y llegada el mismo día o al siguiente.
+  - Validar al menos una clase y capacidades/precios positivos dentro de los límites de base de datos.
+  - Repetir las validaciones de negocio en el backend y mapear conflictos de persistencia a errores entendibles.
+- [ ] Implementar la persistencia del vuelo en la base de datos (5 horas).
+  - Proteger el endpoint con autenticación y permiso específico de alta de vuelos.
+  - Insertar vuelo, días y clases en una única transacción.
+  - Generar las salidas y sus capacidades por clase antes de confirmar la transacción.
+  - Registrar la acción en auditoría y revertir la operación completa ante fallos.
+- [ ] Probar el alta con casos válidos e inválidos (3 horas).
+  - Verificar alta válida, incluyendo salidas y clases generadas.
+  - Rechazar campos inválidos, duplicación de código y acceso sin permiso.
+  - Comprobar atomicidad: un fallo no debe dejar vuelo, días, clases ni salidas parciales.
+
+## US2 — Modelo y base de datos
+
+- [ ] Definir las restricciones de integridad (capacidad por clase, estados de pasaje y de pago) (3 horas).
+- [ ] Crear la base de datos con sus scripts iniciales (4 horas).
+- [ ] Validar el modelo contra las historias del backlog (3 horas).

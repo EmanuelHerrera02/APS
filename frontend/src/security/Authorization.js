@@ -24,4 +24,5 @@ export const Permissions = Object.freeze({
   REPORT_VIEW_FINANCIAL: 'report:view_financial',
   ADMIN_VIEW_AUDIT: 'admin:view_audit',
   ADMIN_CONFIG: 'admin:config',
+  FLIGHT_CREATE: 'flight:create',
 });

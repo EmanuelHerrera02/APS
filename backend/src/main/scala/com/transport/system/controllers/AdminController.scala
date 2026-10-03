@@ -1,8 +1,8 @@
 package com.transport.system.controllers
 
 import com.transport.system.middleware.AuthorizedAction
-import com.transport.system.models.{AdminCreateUserRequest, AdminUserUpdateRequest, Roles, Permissions}
-import com.transport.system.security.{UserRepository, UserWriteError}
+import com.transport.system.models.{AdminCreateFlightRequest, AdminCreateUserRequest, AdminUserUpdateRequest, Roles, Permissions}
+import com.transport.system.security.{FlightRepository, FlightWriteError, UserRepository, UserWriteError}
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import org.scalatra._
@@ -15,6 +15,42 @@ import org.slf4j.LoggerFactory
 class AdminController extends ScalatraServlet with JacksonJsonSupport with AuthorizedAction {
   protected implicit val jsonFormats: Formats = DefaultFormats
   val logger = LoggerFactory.getLogger(getClass)
+
+  /** GET /admin/airports — aeropuertos disponibles para el formulario de vuelos. */
+  get("/airports") {
+    val userId = getUserIdFromRequest(request)
+    if (!hasPermission(request, Permissions.FLIGHT_CREATE)) {
+      logAccessDenied(userId, "list_flight_airports", s"Missing permission: ${Permissions.FLIGHT_CREATE}")
+      Forbidden(Map("error" -> "No tienes permiso para crear vuelos"))
+    } else try Ok(Map("airports" -> FlightRepository.activeAirports()))
+    catch {
+      case ex: Exception =>
+        logger.error("Error listing airports for flight creation", ex)
+        InternalServerError(Map("error" -> "No se pudieron cargar los aeropuertos"))
+    }
+  }
+
+  /** POST /admin/flights — crea el vuelo y materializa sus salidas de forma atómica. */
+  post("/flights") {
+    val userId = getUserIdFromRequest(request)
+    if (!hasPermission(request, Permissions.FLIGHT_CREATE)) {
+      logAccessDenied(userId, "create_flight", s"Missing permission: ${Permissions.FLIGHT_CREATE}")
+      Forbidden(Map("error" -> "No tienes permiso para crear vuelos"))
+    } else try {
+      val input = parsedBody.extract[AdminCreateFlightRequest]
+      FlightRepository.create(userId.toLong, input) match {
+        case Right(flightId) => Created(Map("message" -> "Vuelo creado", "flightId" -> flightId))
+        case Left(FlightWriteError.InvalidData) => BadRequest(Map("error" -> "Revisa los datos del vuelo"))
+        case Left(FlightWriteError.CodeAlreadyExists) => Conflict(Map("error" -> "Ya existe un vuelo con ese código"))
+        case Left(FlightWriteError.InvalidAirport) => BadRequest(Map("error" -> "El aeropuerto indicado no existe o no está disponible"))
+      }
+    } catch {
+      case _: MappingException => BadRequest(Map("error" -> "El cuerpo de la solicitud no es válido"))
+      case ex: Exception =>
+        logger.error("Error creating flight", ex)
+        InternalServerError(Map("error" -> "No se pudo crear el vuelo"))
+    }
+  }
 
   /**
    * GET /admin/dashboard
