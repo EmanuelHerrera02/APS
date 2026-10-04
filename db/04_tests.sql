@@ -484,6 +484,93 @@ BEGIN NOT ATOMIC
     v_err LIKE 'Borrado físico no permitido%');
 END//
 
+-- =============================================================================
+-- Estados de pasaje y de pago
+-- =============================================================================
+
+-- T27. Resultado esperado: ERROR al devolver un pasaje EMITIDO a RESERVADO.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  UPDATE pasaje SET estado = 'RESERVADO' WHERE compra_id = @c_t23;
+  INSERT INTO resultado_test VALUES ('T27', 'Estados de pasaje',
+    'UPDATE pasaje EMITIDO -> RESERVADO', 'ERROR Transición de estado de pasaje inválida; siguen 2 EMITIDO',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'Transición de estado de pasaje inválida%'
+      AND (SELECT COUNT(*) FROM pasaje WHERE compra_id = @c_t23 AND estado = 'EMITIDO') = 2);
+END//
+
+-- T28. Resultado esperado: ERROR al volver un pago APROBADO a PENDIENTE.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  UPDATE pago SET estado = 'PENDIENTE' WHERE id = @p_t23;
+  INSERT INTO resultado_test VALUES ('T28', 'Estados de pago',
+    'UPDATE pago APROBADO -> PENDIENTE', 'ERROR Transición de estado de pago inválida',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'Transición de estado de pago inválida%'
+      AND (SELECT estado FROM pago WHERE id = @p_t23) = 'APROBADO');
+END//
+
+-- T29. Resultado esperado: ERROR al aprobar un pago RECHAZADO (estado final).
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  UPDATE pago SET estado = 'APROBADO' WHERE id = @p_t22;
+  INSERT INTO resultado_test VALUES ('T29', 'Estados de pago',
+    'UPDATE pago RECHAZADO -> APROBADO', 'ERROR Transición de estado de pago inválida',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'Transición de estado de pago inválida%'
+      AND (SELECT estado FROM pago WHERE id = @p_t22) = 'RECHAZADO');
+END//
+
+-- T30. Resultado esperado: ERROR al cambiar el monto de un pago registrado.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  UPDATE pago SET monto = monto + 1 WHERE id = @p_t23;
+  INSERT INTO resultado_test VALUES ('T30', 'Estados de pago',
+    'UPDATE monto de un pago', 'ERROR compra, monto y medio de un pago son inmutables',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'compra, monto y medio de un pago son inmutables%'
+      AND (SELECT monto FROM pago WHERE id = @p_t23) = 200000.00);
+END//
+
+-- T31. Resultado esperado: ERROR al insertar un pago directamente como REEMBOLSADO.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  INSERT INTO pago (compra_id, monto, medio, estado) VALUES (@c_t23, 1.00, 'EFECTIVO', 'REEMBOLSADO');
+  INSERT INTO resultado_test VALUES ('T31', 'Estados de pago',
+    'INSERT pago en estado REEMBOLSADO', 'ERROR Un pago no se registra como REEMBOLSADO',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'Un pago no se registra como REEMBOLSADO%'
+      AND (SELECT COUNT(*) FROM pago WHERE compra_id = @c_t23) = 1);
+END//
+
+-- T32. Resultado esperado: ERROR al cambiar los datos de pasarela de un pago ya resuelto.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  UPDATE pago SET ultimos_4 = '0000' WHERE id = @p_t23;
+  INSERT INTO resultado_test VALUES ('T32', 'Estados de pago',
+    'UPDATE ultimos_4 de un pago APROBADO', 'ERROR Los datos de pasarela de un pago resuelto son inmutables',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'Los datos de pasarela de un pago resuelto son inmutables%'
+      AND (SELECT ultimos_4 FROM pago WHERE id = @p_t23) = '4242');
+END//
+
+-- T33. Resultado esperado: OK. Un pago APROBADO puede pasar a REEMBOLSADO.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  UPDATE pago SET estado = 'REEMBOLSADO' WHERE id = @p_t23;
+  INSERT INTO resultado_test VALUES ('T33', 'Estados de pago',
+    'Control positivo: UPDATE pago APROBADO -> REEMBOLSADO', 'OK; estado REEMBOLSADO',
+    COALESCE(v_err, CONCAT('OK; estado ', (SELECT estado FROM pago WHERE id = @p_t23))),
+    v_err IS NULL AND (SELECT estado FROM pago WHERE id = @p_t23) = 'REEMBOLSADO');
+END//
+
 DELIMITER ;
 
 -- =============================================================================
@@ -494,7 +581,7 @@ SELECT caso, requisito, prueba, esperado, obtenido,
   FROM resultado_test ORDER BY caso;
 
 SELECT COUNT(*) AS casos, SUM(ok) AS pasan, SUM(NOT ok) AS fallan,
-       IF(SUM(NOT ok) = 0 AND COUNT(*) = 26, 'TODOS LOS CASOS PASAN', 'HAY CASOS QUE FALLAN') AS resumen
+       IF(SUM(NOT ok) = 0 AND COUNT(*) = 33, 'TODOS LOS CASOS PASAN', 'HAY CASOS QUE FALLAN') AS resumen
   FROM resultado_test;
 
 SET @casos_ok = (SELECT COUNT(*) FROM resultado_test WHERE ok);
@@ -504,7 +591,7 @@ ROLLBACK;
 -- Termina con error si algún caso falló o no se ejecutó (útil en CI).
 DELIMITER //
 BEGIN NOT ATOMIC
-  IF @casos_ok <> 26 THEN
+  IF @casos_ok <> 33 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '04_tests.sql: hay casos que fallan';
   END IF;
 END//

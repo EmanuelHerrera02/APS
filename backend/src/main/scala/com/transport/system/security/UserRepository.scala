@@ -166,10 +166,10 @@ object UserRepository {
                  active: Option[Boolean], role: Option[String]): Boolean = {
     val normalizedRole = role.map(_.trim.toUpperCase(Locale.ROOT))
     if (normalizedRole.exists(value => !Set(Roles.ADMIN, Roles.EMPLOYEE, Roles.PASSENGER).contains(value)))
-      throw new IllegalArgumentException("Invalid role")
+      throw new IllegalArgumentException("El rol indicado no es válido")
     if (firstName.exists(value => value.trim.isEmpty || value.trim.length > 100) ||
         lastName.exists(value => value.trim.isEmpty || value.trim.length > 100) ||
-        phone.exists(_.length > 30)) throw new IllegalArgumentException("Invalid user data")
+        phone.exists(_.length > 30)) throw new IllegalArgumentException("Revisá nombre, apellido y teléfono")
 
     val fields = List(
       firstName.map(_ => "nombre=?"), lastName.map(_ => "apellido=?"), phone.map(_ => "telefono=?"),

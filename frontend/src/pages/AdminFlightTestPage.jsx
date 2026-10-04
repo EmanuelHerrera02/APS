@@ -2,31 +2,34 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import MainLayout from '../components/layouts/MainLayout';
 import { useAuth } from '../contexts/AuthContext';
-import { validateFlightForm } from '../utils/flightValidation';
+import { localDateString, validateFlightForm } from '../utils/flightValidation';
 
+// Fechas fijas con "hoy" fijo: las pruebas locales no dependen del día en que se ejecutan.
+const testToday = '2029-12-01';
 const validExample = () => ({
   code: 'AB1234', originAirportId: '1', destinationAirportId: '2',
   departureTime: '09:00', arrivalTime: '10:00', arrivalDayOffset: '0',
   startDate: '2030-01-01', endDate: '2030-01-10', operatingDays: ['1'],
   classes: { ECONOMY: { enabled: true, capacity: '10', price: '12000.00' }, PRIMERA: { enabled: false, capacity: '', price: '' } },
 });
+const validate = (form) => validateFlightForm(form, testToday);
 
 const localCases = [
-  { name: 'Datos válidos', check: (form) => Object.keys(validateFlightForm(form)).length === 0 },
-  { name: 'Rechaza origen y destino iguales', check: (form) => !!validateFlightForm({ ...form, destinationAirportId: form.originAirportId }).destinationAirportId },
-  { name: 'Rechaza llegada anterior el mismo día', check: (form) => !!validateFlightForm({ ...form, arrivalTime: '08:30' }).times },
-  { name: 'Acepta llegada al día siguiente', check: (form) => !validateFlightForm({ ...form, arrivalTime: '02:00', arrivalDayOffset: '1' }).times },
-  { name: 'Requiere días de operación', check: (form) => !!validateFlightForm({ ...form, operatingDays: [] }).operatingDays },
-  { name: 'Rechaza capacidad cero', check: (form) => !!validateFlightForm({ ...form, classes: { ...form.classes, ECONOMY: { ...form.classes.ECONOMY, capacity: '0' } } })['capacity-ECONOMY'] },
-  { name: 'Rechaza precio cero', check: (form) => !!validateFlightForm({ ...form, classes: { ...form.classes, ECONOMY: { ...form.classes.ECONOMY, price: '0' } } })['price-ECONOMY'] },
+  { name: 'Datos válidos', check: (form) => Object.keys(validate(form)).length === 0 },
+  { name: 'Rechaza código con formato inválido', check: (form) => !!validate({ ...form, code: 'A-12' }).code },
+  { name: 'Rechaza origen y destino iguales', check: (form) => !!validate({ ...form, destinationAirportId: form.originAirportId }).destinationAirportId },
+  { name: 'Rechaza llegada anterior el mismo día', check: (form) => !!validate({ ...form, arrivalTime: '08:30' }).times },
+  { name: 'Acepta llegada al día siguiente', check: (form) => !validate({ ...form, arrivalTime: '02:00', arrivalDayOffset: '1' }).times },
+  { name: 'Rechaza período invertido', check: (form) => !!validate({ ...form, startDate: '2030-01-10', endDate: '2030-01-01' }).dates },
+  { name: 'Rechaza período que empieza antes de hoy', check: (form) => !!validate({ ...form, startDate: '2029-11-30' }).dates },
+  { name: 'Rechaza período mayor a un año', check: (form) => !!validate({ ...form, endDate: '2031-01-02' }).dates },
+  { name: 'Requiere días de operación', check: (form) => !!validate({ ...form, operatingDays: [] }).operatingDays },
+  { name: 'Rechaza período sin días de operación', check: (form) => !!validate({ ...form, endDate: '2030-01-06' }).operatingDays },
+  { name: 'Requiere al menos una clase', check: (form) => !!validate({ ...form, classes: { ...form.classes, ECONOMY: { ...form.classes.ECONOMY, enabled: false } } }).classes },
+  { name: 'Rechaza capacidad cero', check: (form) => !!validate({ ...form, classes: { ...form.classes, ECONOMY: { ...form.classes.ECONOMY, capacity: '0' } } })['capacity-ECONOMY'] },
+  { name: 'Rechaza precio cero', check: (form) => !!validate({ ...form, classes: { ...form.classes, ECONOMY: { ...form.classes.ECONOMY, price: '0' } } })['price-ECONOMY'] },
+  { name: 'Rechaza precio con tres decimales', check: (form) => !!validate({ ...form, classes: { ...form.classes, ECONOMY: { ...form.classes.ECONOMY, price: '10.005' } } })['price-ECONOMY'] },
 ];
-
-function localDateString(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
 
 function nextOperatingDate() {
   const date = new Date();
@@ -86,7 +89,7 @@ export default function AdminFlightTestPage() {
         });
         results.push({ name: 'El backend rechaza ruta inválida', passed: false, detail: 'La solicitud inválida fue aceptada.' });
       } catch (error) {
-        const passed = error.message === 'Revisa los datos del vuelo';
+        const passed = error.message === 'El origen y el destino deben ser distintos';
         results.push({ name: 'El backend rechaza ruta inválida', passed, detail: passed ? 'Respondió con el error de validación esperado.' : error.message });
       }
 

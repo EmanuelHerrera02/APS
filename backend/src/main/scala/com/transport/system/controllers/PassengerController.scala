@@ -21,8 +21,18 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
   val logger = LoggerFactory.getLogger(getClass)
 
   /**
+   * Patrón LIKE para ubicar un aeropuerto por ciudad o nombre. Desde 4 caracteres
+   * busca coincidencias parciales ("Bariloche", "Aeroparque"); los términos más
+   * cortos deben coincidir completos para no confundir un código IATA con un fragmento.
+   */
+  private def placePattern(term: String): String = {
+    val escaped = term.replace("!", "!!").replace("%", "!%").replace("_", "!_")
+    if (term.length >= 4) s"%$escaped%" else escaped
+  }
+
+  /**
    * GET /passenger/search?origin=AEP&destination=COR&dateFrom=2026-10-10&dateTo=2026-10-12
-   * Buscar salidas vendibles por ciudad/código IATA y rango inclusivo de fechas.
+   * Buscar salidas vendibles por código IATA, ciudad o nombre de aeropuerto y rango inclusivo de fechas.
    */
   get("/search") {
     val origin = params.getOrElse("origin", "").trim
@@ -60,8 +70,12 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
                 |       destino, ciudad_destino, fecha, hora_partida, hora_llegada,
                 |       dias_desfase_llegada, clase, precio, asientos_disponibles
                 |FROM v_disponibilidad
-                |WHERE (UPPER(origen) = UPPER(?) OR UPPER(ciudad_origen) = UPPER(?))
-                |  AND (UPPER(destino) = UPPER(?) OR UPPER(ciudad_destino) = UPPER(?))
+                |WHERE (UPPER(origen) = UPPER(?)
+                |       OR origen IN (SELECT codigo_iata FROM aeropuerto
+                |                      WHERE ciudad LIKE ? ESCAPE '!' OR nombre LIKE ? ESCAPE '!'))
+                |  AND (UPPER(destino) = UPPER(?)
+                |       OR destino IN (SELECT codigo_iata FROM aeropuerto
+                |                       WHERE ciudad LIKE ? ESCAPE '!' OR nombre LIKE ? ESCAPE '!'))
                 |  AND fecha BETWEEN ? AND ?
                 |  AND asientos_disponibles > 0
                 |ORDER BY fecha, hora_partida, codigo_vuelo, clase""".stripMargin
@@ -72,11 +86,13 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
                 val statement = connection.prepareStatement(sql)
                 try {
                   statement.setString(1, origin)
-                  statement.setString(2, origin)
-                  statement.setString(3, destination)
+                  statement.setString(2, placePattern(origin))
+                  statement.setString(3, placePattern(origin))
                   statement.setString(4, destination)
-                  statement.setDate(5, java.sql.Date.valueOf(dateFrom))
-                  statement.setDate(6, java.sql.Date.valueOf(dateTo))
+                  statement.setString(5, placePattern(destination))
+                  statement.setString(6, placePattern(destination))
+                  statement.setDate(7, java.sql.Date.valueOf(dateFrom))
+                  statement.setDate(8, java.sql.Date.valueOf(dateTo))
                   val resultSet = statement.executeQuery()
                   val results = scala.collection.mutable.ListBuffer.empty[Map[String, Any]]
                   try {

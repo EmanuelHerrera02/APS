@@ -29,6 +29,12 @@ Si la base ya existía antes de agregar el alta de vuelos, aplicar la migración
 docker compose exec -T db mariadb -uaeronet_app -paeronet_app_dev aeronet -e "SOURCE /aeronet/db/05_migration_flight_create_permission.sql"
 ```
 
+Del mismo modo, si la base es anterior a la máquina de estados de pagos, aplicar una vez:
+
+```powershell
+docker compose exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" aeronet < /aeronet/db/06_migration_pago_estados.sql'
+```
+
 En otra terminal iniciar la interfaz:
 
 ```powershell
@@ -61,3 +67,12 @@ El comando crea o renueva `admin.dev@aeronet.test`, `pasajero.dev@aeronet.test` 
 `mostrador.dev@aeronet.test`. Se conecta con `AERONET_JDBC_URL`, `AERONET_DB_USER` y
 `AERONET_DB_PASSWORD` configurados para la API. Repetirlo rota las contraseñas por las ingresadas.
 La página de pruebas de vuelos está en `/admin/flights/test` al iniciar sesión con la cuenta ADMIN.
+
+Las pruebas HTTP automatizadas usan instancias aisladas de la base: ver
+[pruebas-alta-vuelos.md](pruebas-alta-vuelos.md) (US5) y [pruebas-busqueda-viajes.md](pruebas-busqueda-viajes.md) (US7).
+
+La edición de usuarios (US4) se prueba igual, en el puerto `3309`: levantar
+`docker compose -f docker-compose.yml -f docker-compose.us4.yml -p aeronet-us4 up -d db` con
+`$env:AERONET_DB_PORT = '3309'`, crear las cuentas de desarrollo en esa instancia, iniciar la API
+contra ella y ejecutar `node tests/http/us4-edicion-usuarios.mjs` con las mismas variables
+`AERONET_DEV_*_PASSWORD`. El script modifica la cuenta de pasajero y la restaura al final.

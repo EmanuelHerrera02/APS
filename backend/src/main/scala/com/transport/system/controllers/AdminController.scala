@@ -37,10 +37,10 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
       logAccessDenied(userId, "create_flight", s"Missing permission: ${Permissions.FLIGHT_CREATE}")
       Forbidden(Map("error" -> "No tienes permiso para crear vuelos"))
     } else try {
-      val input = parsedBody.extract[AdminCreateFlightRequest]
+      val input = AdminCreateFlightRequest.fromJson(parsedBody)
       FlightRepository.create(userId.toLong, input) match {
         case Right(flightId) => Created(Map("message" -> "Vuelo creado", "flightId" -> flightId))
-        case Left(FlightWriteError.InvalidData) => BadRequest(Map("error" -> "Revisa los datos del vuelo"))
+        case Left(FlightWriteError.InvalidData(message)) => BadRequest(Map("error" -> message))
         case Left(FlightWriteError.CodeAlreadyExists) => Conflict(Map("error" -> "Ya existe un vuelo con ese código"))
         case Left(FlightWriteError.InvalidAirport) => BadRequest(Map("error" -> "El aeropuerto indicado no existe o no está disponible"))
       }
@@ -149,7 +149,7 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
         logAccessDenied(userId, s"edit_user_$targetUserId", s"Missing permission: ${Permissions.USER_EDIT}")
         Forbidden(Map("error" -> "No tienes permiso para editar usuarios"))
       } else {
-        val input = parsedBody.extract[AdminUserUpdateRequest]
+        val input = AdminUserUpdateRequest.fromJson(parsedBody)
         if (input.role.isDefined && !hasPermission(request, Permissions.USER_CHANGE_ROLE)) {
           logAccessDenied(userId, s"change_role_$targetUserId", s"Missing permission: ${Permissions.USER_CHANGE_ROLE}")
           Forbidden(Map("error" -> "No tienes permiso para cambiar roles"))

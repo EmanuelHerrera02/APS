@@ -1,8 +1,10 @@
 # US7 — Matriz de casos de búsqueda
 
-**Estado:** casos y resultados esperados definidos; ejecución HTTP pendiente.
+**Estado:** matriz automatizada en [tests/http/us7-busqueda.mjs](../tests/http/us7-busqueda.mjs); 18/18 comprobaciones aprobadas el 2026-10-04.
 
 La búsqueda usa `GET /passenger/search` sin credenciales. Los casos con resultados usan fechas calculadas desde salidas futuras del seed, para no depender de una fecha fija.
+
+Origen y destino aceptan el código IATA (coincidencia exacta), la ciudad o el nombre del aeropuerto. Con 4 caracteres o más, ciudad y nombre admiten coincidencia parcial ("Bariloche", "Aeroparque"); los términos más cortos deben coincidir completos para no confundir un código con un fragmento. La comparación no distingue mayúsculas ni acentos, y `%` y `_` se buscan como texto.
 
 | Caso | Criterio | Resultado esperado |
 |---|---|---|
@@ -18,10 +20,12 @@ La búsqueda usa `GET /passenger/search` sin credenciales. Los casos con resulta
 | S10 | Fecha final anterior a la fecha inicial | HTTP 400. |
 | S11 | Fecha inicial anterior a hoy en Argentina | HTTP 400. |
 | S12 | Llamada sin `Authorization` | La búsqueda sigue disponible y responde según sus criterios; el endpoint es público. |
+| S13 | `AEP` → `Bariloche` (parte de “San Carlos de Bariloche”) | HTTP 200; mismas opciones que `AEP` → `BRC`. |
+| S14 | `Aeroparque` → `bariloche` (nombre de aeropuerto) | HTTP 200; mismas opciones que `AEP` → `BRC`. |
+| S15 | `AEP` → `Bar` (menos de 4 letras) | HTTP 200 con `results: []`: no hay coincidencia parcial. |
+| S16 | `%%%%` → `____` | HTTP 200 con `results: []`: los comodines de SQL no coinciden con todo. |
 
-## Desajuste de alcance por resolver
-
-El campo de la interfaz dice “Ciudad o aeropuerto”. El backend compara el código IATA y la ciudad, pero no `aeropuerto.nombre`. Si “aeropuerto” incluye buscar por nombre completo, agregar un caso que espere coincidencia por ese nombre y ampliar la consulta antes de ejecutar la matriz. Si solo se esperan códigos IATA, S01 cubre la búsqueda por aeropuerto y no hace falta esa ampliación.
+El desajuste anterior (la interfaz decía “Ciudad o aeropuerto” pero no se buscaba por nombre de aeropuerto) quedó resuelto con S13–S16.
 
 ## Preparación reproducible
 
@@ -66,3 +70,15 @@ Matriz ejecutada contra `http://localhost:8080/passenger/search` con `Accept: ap
 | **Total** | **14/14 comprobaciones aprobadas.** |
 
 En la ejecución, las salidas de la fixture fueron el 13 y 14 de octubre de 2026. Las compras de los casos S05–S06 se confirmaron para que el evento de expiración no liberara sus asientos durante la prueba.
+
+## Ejecución automatizada — 2026-10-04
+
+Con la instancia preparada y la API apuntando a ella:
+
+```powershell
+node tests/http/us7-busqueda.mjs
+```
+
+Variables opcionales: `AERONET_API_URL` (por defecto `http://localhost:8080`) y `AERONET_TEST_DB_CONTAINER` (por defecto `aeronet-us7-db`). El script toma las fechas de la fixture y del seed desde la base y termina con código distinto de 0 si alguna comprobación falla.
+
+Resultado: **18/18 aprobadas** (S01–S16, con S07 dividido en tres). Las salidas de la fixture fueron el 14 y 15 de octubre de 2026.

@@ -1,0 +1,11 @@
+# Instancia aislada para las pruebas HTTP de alta de vuelos (US5).
+# Uso: docker compose -f docker-compose.yml -f docker-compose.us5.yml -p aeronet-us5 up -d db
+# Las altas válidas dejan vuelos permanentes: no usar la base de desarrollo.
+services:
+  db:
+    container_name: aeronet-us5-db
+    volumes:
+      - aeronet-us5-data:/var/lib/mysql
+
+volumes:
+  aeronet-us5-data:

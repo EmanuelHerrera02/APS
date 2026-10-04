@@ -105,6 +105,34 @@ case class AdminUserUpdateRequest(
   role: Option[String] = None
 )
 
+object AdminUserUpdateRequest {
+  import org.json4s._
+
+  /**
+   * Igual que AdminCreateFlightRequest.fromJson: `extract` falla en Scala 3 con esta case class
+   * ("Can't find ScalaSig"). Un campo ausente o null no se modifica; otro tipo lanza MappingException.
+   */
+  def fromJson(json: JValue): AdminUserUpdateRequest = {
+    if (!json.isInstanceOf[JObject]) throw new MappingException("El cuerpo debe ser un objeto JSON")
+    def text(field: String): Option[String] = json \ field match {
+      case JNothing | JNull => None
+      case JString(value) => Some(value)
+      case _ => throw new MappingException(s"$field debe ser un texto")
+    }
+    AdminUserUpdateRequest(
+      firstName = text("firstName"),
+      lastName = text("lastName"),
+      phone = text("phone"),
+      active = json \ "active" match {
+        case JNothing | JNull => None
+        case JBool(value) => Some(value)
+        case _ => throw new MappingException("active debe ser true o false")
+      },
+      role = text("role")
+    )
+  }
+}
+
 case class FlightClassRequest(
   className: String,
   capacity: Int,
@@ -123,6 +151,68 @@ case class AdminCreateFlightRequest(
   operatingDays: List[Int],
   classes: List[FlightClassRequest]
 )
+
+object AdminCreateFlightRequest {
+  import org.json4s._
+
+  /**
+   * json4s no puede usar `extract` en Scala 3 con case classes que tienen campos genéricos
+   * (List[...]): falla con "Can't find ScalaSig". Se lee campo por campo, con tipos estrictos.
+   * Lanza MappingException si falta un campo o tiene otro tipo.
+   */
+  def fromJson(json: JValue): AdminCreateFlightRequest = {
+    def fail(field: String, expected: String) = throw new MappingException(s"$field debe ser $expected")
+    def string(value: JValue, field: String): String = value match {
+      case JString(text) => text
+      case _ => fail(field, "un texto")
+    }
+    def integer(value: JValue, field: String): BigInt = value match {
+      case JInt(number) => number
+      case JLong(number) => BigInt(number)
+      case _ => fail(field, "un entero")
+    }
+    def int(value: JValue, field: String): Int = {
+      val number = integer(value, field)
+      if (number.isValidInt) number.toInt else fail(field, "un entero de 32 bits")
+    }
+    def long(value: JValue, field: String): Long = {
+      val number = integer(value, field)
+      if (number.isValidLong) number.toLong else fail(field, "un entero de 64 bits")
+    }
+    def decimal(value: JValue, field: String): BigDecimal = value match {
+      case JInt(number) => BigDecimal(number)
+      case JLong(number) => BigDecimal(number)
+      case JDouble(number) => BigDecimal(number)
+      case JDecimal(number) => number
+      case _ => fail(field, "un número")
+    }
+    def array(value: JValue, field: String): List[JValue] = value match {
+      case JArray(items) => items
+      case _ => fail(field, "un array")
+    }
+
+    AdminCreateFlightRequest(
+      code = string(json \ "code", "code"),
+      originAirportId = long(json \ "originAirportId", "originAirportId"),
+      destinationAirportId = long(json \ "destinationAirportId", "destinationAirportId"),
+      departureTime = string(json \ "departureTime", "departureTime"),
+      arrivalTime = string(json \ "arrivalTime", "arrivalTime"),
+      arrivalDayOffset = json \ "arrivalDayOffset" match {
+        case JNothing => 0
+        case value => int(value, "arrivalDayOffset")
+      },
+      startDate = string(json \ "startDate", "startDate"),
+      endDate = string(json \ "endDate", "endDate"),
+      operatingDays = array(json \ "operatingDays", "operatingDays").map(int(_, "operatingDays")),
+      classes = array(json \ "classes", "classes").map { item =>
+        FlightClassRequest(
+          className = string(item \ "className", "className"),
+          capacity = int(item \ "capacity", "capacity"),
+          price = decimal(item \ "price", "price"))
+      }
+    )
+  }
+}
 
 /**
  * Roles del sistema

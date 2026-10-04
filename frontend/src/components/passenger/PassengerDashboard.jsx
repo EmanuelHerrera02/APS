@@ -104,7 +104,7 @@ export default function PassengerDashboard() {
                 <label htmlFor="trip-origin">Origen</label>
                 <div className="trip-search-input-wrap">
                   <span aria-hidden="true">⌖</span>
-                  <input id="trip-origin" name="origin" value={form.origin} onChange={updateField} placeholder="Ciudad o aeropuerto" autoComplete="off" aria-invalid={Boolean(errors.origin)} aria-describedby={errors.origin ? 'trip-origin-error' : undefined} />
+                  <input id="trip-origin" name="origin" value={form.origin} onChange={updateField} placeholder="Ciudad, aeropuerto o código" autoComplete="off" aria-invalid={Boolean(errors.origin)} aria-describedby={errors.origin ? 'trip-origin-error' : undefined} />
                 </div>
                 {errors.origin && <span className="trip-search-error" id="trip-origin-error">{errors.origin}</span>}
               </div>
@@ -115,7 +115,7 @@ export default function PassengerDashboard() {
                 <label htmlFor="trip-destination">Destino</label>
                 <div className="trip-search-input-wrap">
                   <span aria-hidden="true">⌖</span>
-                  <input id="trip-destination" name="destination" value={form.destination} onChange={updateField} placeholder="¿A dónde viajás?" autoComplete="off" aria-invalid={Boolean(errors.destination)} aria-describedby={errors.destination ? 'trip-destination-error' : undefined} />
+                  <input id="trip-destination" name="destination" value={form.destination} onChange={updateField} placeholder="Ciudad, aeropuerto o código" autoComplete="off" aria-invalid={Boolean(errors.destination)} aria-describedby={errors.destination ? 'trip-destination-error' : undefined} />
                 </div>
                 {errors.destination && <span className="trip-search-error" id="trip-destination-error">{errors.destination}</span>}
               </div>
@@ -140,7 +140,7 @@ export default function PassengerDashboard() {
             </div>
 
             <div className="trip-search-actions">
-              <span className="trip-search-hint">Si indicás una fecha final, buscamos salidas dentro de ese rango.</span>
+              <span className="trip-search-hint">Podés escribir la ciudad (Bariloche), el aeropuerto (Aeroparque) o el código (AEP). Si indicás una fecha final, buscamos salidas dentro de ese rango.</span>
               <button className="trip-search-submit" type="submit" disabled={searchState.status === 'loading'}>
                 <span aria-hidden="true">⌕</span> {searchState.status === 'loading' ? 'Buscando…' : 'Buscar viajes'}
               </button>

@@ -8,7 +8,8 @@ SQL puro, sin ORM.
 | [db/01_schema.sql](../db/01_schema.sql) | Base, tablas, PK/FK/UNIQUE/CHECK, índices y vistas |
 | [db/02_logic.sql](../db/02_logic.sql) | Triggers, procedimientos almacenados y evento programado |
 | [db/03_seed.sql](../db/03_seed.sql) | Datos de prueba (10 aeropuertos, 4 vuelos, 6 usuarios, 7 compras) |
-| [db/04_tests.sql](../db/04_tests.sql) | 26 casos que verifican restricciones y lógica |
+| [db/04_tests.sql](../db/04_tests.sql) | 33 casos que verifican restricciones y lógica |
+| [db/05_migration_flight_create_permission.sql](../db/05_migration_flight_create_permission.sql), [db/06_migration_pago_estados.sql](../db/06_migration_pago_estados.sql) | Migraciones idempotentes para bases creadas antes de esos cambios |
 | [docker-compose.yml](../docker-compose.yml) | MariaDB que carga 01 → 02 → 03 al crear el volumen |
 
 ```bash
@@ -332,6 +333,7 @@ exactamente 12 aceptadas y 13 rechazadas.
 | `pasaje` | `bi` | Hasta 9 por compra. Solo en compras pendientes. Exige asiento reservado. Congela el precio si no viene. Genera el código. |
 | `pasaje` | `bu` | Compra, salida, clase, precio y código son inmutables. Transiciones: `RESERVADO → EMITIDO / CANCELADO` y `EMITIDO → CANCELADO`. |
 | `pasaje` | `au` | Al cancelar, devuelve el asiento (`vendidos - 1`). |
+| `pago` | `bi` / `bu` | No se inserta como `REEMBOLSADO`. Transiciones: `PENDIENTE → APROBADO / RECHAZADO` y `APROBADO → REEMBOLSADO`. Compra, monto y medio son inmutables; los datos de pasarela solo cambian mientras está `PENDIENTE`. |
 | `factura` | `bi` / `bu` | Solo se factura una compra confirmada, con su total. Una vez emitida, solo se puede completar `ruta_pdf`. |
 | aeropuerto, usuario, vuelo, vuelo_clase, salida, salida_clase, compra, pasaje, pago, factura | `bd` | Borrado físico bloqueado (borrado lógico). |
 
@@ -404,9 +406,10 @@ exactamente 12 aceptadas y 13 rechazadas.
 16. **Una compra = una salida.** Un viaje de ida y vuelta son dos compras. Es lo que pide la
     decisión tomada y simplifica la capacidad y la facturación.
 
-17. **Estados como máquinas de estado en triggers.** Los estados finales (`EXPIRADA`,
-    `CANCELADA`, `CANCELADO`) no se reabren: reabrirlos sin volver a reservar rompería el
-    invariante de capacidad.
+17. **Estados como máquinas de estado en triggers** (vuelo, salida, compra, pasaje y pago). Los
+    estados finales (`EXPIRADA`, `CANCELADA`, `CANCELADO`, `RECHAZADO`, `REEMBOLSADO`) no se
+    reabren: reabrir una compra o un pasaje sin volver a reservar rompería el invariante de
+    capacidad, y reabrir un pago dejaría su efecto sobre la compra sin aplicar.
 
 18. **Borrado lógico.** `activo` en aeropuerto, usuario y dispositivo; `estado` en el resto. Las
     tablas de negocio tienen triggers `BEFORE DELETE` que lo impiden. Las FK usan
@@ -456,31 +459,54 @@ No hubo que cambiar ninguna de las decisiones de diseño acordadas: todas se imp
 
 ## 5. Trazabilidad con el backlog
 
-> **A validar por el equipo.** El backlog no está en el repositorio, así que la numeración de US 3
-> a US 20 de esta tabla es **una propuesta**, derivada de los requisitos del enunciado en su orden.
-> Lo que importa es la columna de requisito; si la numeración real difiere, se renumera sin cambiar
-> el resto. La única referencia en el repo es el commit "Beta US4", que implementa acceso por rol.
+Los números confirmados son los de [Skills/tareas.md](../Skills/tareas.md): **US2** (este modelo),
+**US4** (alta, inicio de sesión y acceso por roles), **US5** (alta de vuelos) y **US7** (búsqueda de
+viajes). El backlog oficial no está en el repositorio, así que el resto de los requisitos del
+enunciado figura **sin número**; se asigna cuando el equipo lo confirme, sin cambiar las demás columnas.
 
-| US (propuesta) | Requisito | Entidades | Soporte en la base |
+| US | Requisito | Entidades | Soporte en la base |
 |---|---|---|---|
-| US 3 | Registro de pasajero | `usuario` | email único, hash obligatorio, rol `PASAJERO` |
-| US 4 | Inicio de sesión y acceso por rol | `usuario` | `rol`, `activo`, `ultimo_acceso` |
-| US 5 | Admin crea vuelo (días, horarios, ruta, período, capacidad y precio por clase) | `vuelo`, `vuelo_dia_operacion`, `vuelo_clase`, `aeropuerto`, `salida`, `salida_clase` | CHECKs de vuelo, `generar_salidas()` |
-| US 6 | Admin modifica vuelo | `vuelo`, `vuelo_clase`, `salida`, `salida_clase` | propagación de horario y capacidad a salidas futuras; `generar_salidas()` idempotente |
-| US 7 | Admin cancela vuelo o salida | `vuelo`, `salida`, `compra`, `notificacion` | cascada de cancelación, compras impagas canceladas, outbox |
-| US 8 | Pasajero busca vuelos por origen, destino y fechas | `salida`, `salida_clase`, `vuelo_clase`, `aeropuerto` | `v_disponibilidad`, `ix_salida_busqueda` |
-| US 9 | Compra de 1 a 9 pasajes eligiendo clase | `compra`, `pasaje`, `salida_clase` | `crear_compra()`, `reservar_asientos()`, trigger de 9 pasajes, precio congelado |
-| US 10 | Pago en línea | `pago`, `compra` | `registrar_pago()`, solo últimos 4 dígitos, id de transacción único |
-| US 11 | Envío de pasajes y factura por email | `factura`, `notificacion` (`CONFIRMACION`) | outbox encolado al confirmar el pago |
-| US 12 | Venta en mostrador | `compra` (`canal = MOSTRADOR`, `empleado_id`, `usuario_id` NULL), `pago` (`EFECTIVO`) | CHECK canal ↔ empleado, validación de rol del empleado |
-| US 13 | Mostrador consulta documentación de pasajeros | `pasaje`, `compra`, `factura` | `ix_pasaje_documento`, `ix_pasaje_apellido`, `uq_compra_codigo`, `ix_compra_email` |
-| US 14 | Mostrador reenvía documentación | `notificacion` (`REENVIO`, `solicitado_por_id`) | `reenviar_documentacion()` |
-| US 15 | Reportes de ocupación por vuelo, clase y fecha | `salida_clase`, `pasaje`, `salida`, `vuelo` | `v_ocupacion` |
-| US 16 | Email ante cambio de horario o cancelación | `notificacion` (`EMAIL`) | trigger `trg_salida_au` |
-| US 17 | Push en la app móvil | `dispositivo_usuario`, `notificacion` (`PUSH`) | tokens por usuario; push encolado junto al email |
-| US 18 | Admin gestiona cuentas internas (crear, modificar, deshabilitar) | `usuario` (`MOSTRADOR`, `ADMIN`) | `activo`, borrado físico bloqueado |
-| US 19 | Pasajero consulta sus compras y pasajes (web y app) | `compra`, `pasaje`, `factura` | `ix_compra_usuario` |
-| US 20 | Vencimiento de reservas impagas | `compra`, `salida_clase` | `liberar_reservas_vencidas()`, evento cada minuto |
+| US4 | Registro de pasajero, inicio de sesión y acceso por rol y permiso | `usuario`, `sesion_usuario`, `permiso`, `rol_permiso`, `auditoria` | email único, hash obligatorio, `rol`, `activo`, `ultimo_acceso`, refresh token solo como SHA-256 |
+| US5 | Admin crea vuelo (días, horarios, ruta, período, capacidad y precio por clase) | `vuelo`, `vuelo_dia_operacion`, `vuelo_clase`, `aeropuerto`, `salida`, `salida_clase`, `auditoria` | CHECKs de vuelo, `generar_salidas()`, permiso `flight:create` |
+| US7 | Pasajero busca vuelos por origen, destino y fechas | `salida`, `salida_clase`, `vuelo_clase`, `aeropuerto` | `v_disponibilidad`, `ix_salida_busqueda` |
+| — | Admin modifica vuelo | `vuelo`, `vuelo_clase`, `salida`, `salida_clase` | propagación de horario y capacidad a salidas futuras; `generar_salidas()` idempotente |
+| — | Admin cancela vuelo o salida | `vuelo`, `salida`, `compra`, `notificacion` | cascada de cancelación, compras impagas canceladas, outbox |
+| — | Compra de 1 a 9 pasajes eligiendo clase | `compra`, `pasaje`, `salida_clase` | `crear_compra()`, `reservar_asientos()`, trigger de 9 pasajes, precio congelado |
+| — | Pago en línea | `pago`, `compra` | `registrar_pago()`, máquina de estados de pago, solo últimos 4 dígitos, id de transacción único |
+| — | Envío de pasajes y factura por email | `factura`, `notificacion` (`CONFIRMACION`) | outbox encolado al confirmar el pago |
+| — | Venta en mostrador | `compra` (`canal = MOSTRADOR`, `empleado_id`, `usuario_id` NULL), `pago` (`EFECTIVO`) | CHECK canal ↔ empleado, validación de rol del empleado |
+| — | Mostrador consulta documentación de pasajeros | `pasaje`, `compra`, `factura` | `ix_pasaje_documento`, `ix_pasaje_apellido`, `uq_compra_codigo`, `ix_compra_email` |
+| — | Mostrador reenvía documentación | `notificacion` (`REENVIO`, `solicitado_por_id`) | `reenviar_documentacion()` |
+| — | Reportes de ocupación por vuelo, clase y fecha | `salida_clase`, `pasaje`, `salida`, `vuelo` | `v_ocupacion` |
+| — | Email ante cambio de horario o cancelación | `notificacion` (`EMAIL`) | trigger `trg_salida_au` |
+| — | Push en la app móvil | `dispositivo_usuario`, `notificacion` (`PUSH`) | tokens por usuario; push encolado junto al email |
+| — | Admin gestiona cuentas internas (crear, modificar, deshabilitar) | `usuario` (`MOSTRADOR`, `ADMIN`) | `activo`, borrado físico bloqueado |
+| — | Pasajero consulta sus compras y pasajes (web y app) | `compra`, `pasaje`, `factura` | `ix_compra_usuario` |
+| — | Vencimiento de reservas impagas | `compra`, `salida_clase` | `liberar_reservas_vencidas()`, evento cada minuto |
+
+### Validación del modelo contra las historias implementadas (2026-10-04)
+
+Cada historia de la etapa 1 se ejecutó contra una base creada desde cero con `01`–`03`:
+
+| US | Qué se comprobó | Evidencia | Resultado |
+|---|---|---|---|
+| US2 | Capacidad por clase, límite de 9 pasajes, estados de compra, pasaje y pago, reservas vencidas, notificaciones, borrado lógico | [db/04_tests.sql](../db/04_tests.sql) | 33/33 |
+| US4 | Login con hash, roles y permisos leídos de `rol_permiso`, denegaciones por rol, edición de cuentas (datos, `activo`, `rol`) con auditoría | [tests/http/us4-edicion-usuarios.mjs](../tests/http/us4-edicion-usuarios.mjs) y accesos A01–A05 de [pruebas-alta-vuelos.md](pruebas-alta-vuelos.md) | 23/23 |
+| US5 | Alta de vuelo con días, clases, salidas y capacidades por salida en una transacción; rechazo de datos inválidos y duplicados; auditoría | [tests/http/us5-alta-vuelos.mjs](../tests/http/us5-alta-vuelos.mjs) | 47/47 |
+| US7 | Búsqueda por código, ciudad o aeropuerto y rango de fechas; clases agotadas; casos sin resultados | [tests/http/us7-busqueda.mjs](../tests/http/us7-busqueda.mjs) | 18/18 |
+
+Ajustes que surgieron de la validación:
+
+- **Estados de pago.** `pago.estado` no tenía máquina de estados: un pago `APROBADO` podía volver a
+  `PENDIENTE` o cambiar su monto. Se agregaron `trg_pago_bi` y `trg_pago_bu` (casos T28–T33) y la
+  migración `06_migration_pago_estados.sql`.
+- **Búsqueda por aeropuerto.** `v_disponibilidad` expone código y ciudad, pero no el nombre del
+  aeropuerto. La consulta de US7 lo resuelve con una subconsulta sobre `aeropuerto`, sin cambiar la vista.
+- **Aeropuertos deshabilitados.** La FK de `vuelo` acepta un aeropuerto con `activo = FALSE`. El alta
+  de vuelos lo controla en el backend dentro de la transacción (caso V05).
+
+Las historias sin número todavía no tienen código que use el modelo; su soporte está cubierto por
+los casos de `04_tests.sql`, pero la validación de punta a punta queda para cuando se implementen.
 
 ---
 
@@ -490,8 +516,12 @@ No hubo que cambiar ninguna de las decisiones de diseño acordadas: todas se imp
   `frontend/src/security/Authorization.js` usan `ADMIN`, `MOSTRADOR` y `PASAJERO`.
   El catálogo de códigos está en `permiso`; `rol_permiso` asigna esos permisos a cada rol.
   `Permissions` en Scala y frontend usa los mismos códigos que `permiso.codigo`.
-  Los nombres de campos del modelo de usuario aún requieren mapeo al integrar (`status` ↔ `activo`,
+  `UserRepository` traduce los campos de la API a las columnas (`active` ↔ `activo`,
   `lastLogin` ↔ `ultimo_acceso`, `phone` ↔ `telefono`).
+- **Efecto de un pago actualizado.** `registrar_pago()` aplica el efecto sobre la compra al
+  *registrar* el pago. Si una pasarela asíncrona necesitara pasar un pago `PENDIENTE` a
+  `APROBADO` con un `UPDATE`, hará falta un procedimiento que confirme la compra en la misma
+  transacción.
 - **Reembolsos y reubicación** de compras confirmadas en salidas canceladas: el modelo lo soporta
   (`pago.estado = REEMBOLSADO`, `compra` `CONFIRMADA → CANCELADA`), pero falta definir el proceso.
 - **Numeración fiscal de facturas** (punto de venta, correlatividad y CAE de AFIP): hoy `numero` es

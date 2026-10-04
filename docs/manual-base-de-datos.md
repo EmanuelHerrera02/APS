@@ -156,9 +156,11 @@ compra:   PENDIENTE_PAGO ──pago aprobado──▶ CONFIRMADA ──▶ CANCE
 pasaje:   RESERVADO ──▶ EMITIDO ──▶ CANCELADO   (cambian solos con la compra)
 salida:   PROGRAMADA ──▶ CANCELADA
 vuelo:    ACTIVO ──▶ CANCELADO
+pago:     PENDIENTE ──▶ APROBADO ──▶ REEMBOLSADO
+                └──▶ RECHAZADO
 ```
 
-`CANCELADA`, `EXPIRADA` y `CANCELADO` son **finales**: no se pueden revertir.
+`CANCELADA`, `EXPIRADA`, `CANCELADO`, `RECHAZADO` y `REEMBOLSADO` son **finales**: no se pueden revertir. Un pago no cambia de compra, monto ni medio.
 
 ---
 
@@ -547,7 +549,7 @@ Otros errores de MariaDB que pueden aparecer:
 1. Editar el script que corresponda: `01_schema.sql` (tablas), `02_logic.sql` (triggers y
    procedimientos) o `03_seed.sql` (datos).
 2. Si cambia una regla, agregar o ajustar un caso en `04_tests.sql`, y actualizar el total
-   esperado (`26`) al final del archivo.
+   esperado (`33`) al final del archivo.
 3. Recrear la base y correr los tests:
    ```
    docker compose down -v

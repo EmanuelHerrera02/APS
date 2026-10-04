@@ -7,7 +7,20 @@
       "Bash(docker exec *)",
       "Bash(break)",
       "Bash(docker rm *)",
-      "Bash(python -)"
+      "Bash(python -)",
+      "PowerShell(Get-ChildItem \"$env:USERPROFILE\\\\.sbt\" | Select-Object FullName; Get-ChildItem \"$env:LOCALAPPDATA\\\\Coursier\" -Recurse -Depth 2 -ErrorAction SilentlyContinue | Select-Object -First 15 FullName; Get-ChildItem \"$env:LOCALAPPDATA\\\\Coursier\\\\data\\\\bin\" -ErrorAction SilentlyContinue | Select-Object Name)",
+      "PowerShell(Get-Content backend\\\\project\\\\build.properties; where.exe sbt 2>$null; Get-ChildItem \"C:\\\\Program Files \\(x86\\)\" -Directory | Where-Object Name -match \"sbt|scala\" ; Get-ChildItem \"C:\\\\Program Files\" -Directory | Where-Object Name -match \"sbt|scala\"; Get-ChildItem \"$env:LOCALAPPDATA\\\\Coursier\\\\cache\\\\v1\\\\https\" -Directory | Select-Object Name)",
+      "PowerShell(Get-ChildItem \"$env:LOCALAPPDATA\\\\Coursier\\\\cache\\\\v1\\\\https\\\\repo1.maven.org\\\\maven2\\\\org\\\\scala-sbt\" -Directory -ErrorAction SilentlyContinue | Where-Object Name -match \"launch|sbt$\" | Select-Object FullName; Get-ChildItem \"$env:LOCALAPPDATA\\\\Coursier\\\\cache\\\\v1\\\\https\\\\repo1.maven.org\\\\maven2\\\\org\\\\scala-sbt\\\\sbt\" -Directory -ErrorAction SilentlyContinue | Select-Object Name; Get-ChildItem \"$env:LOCALAPPDATA\\\\Coursier\\\\cache\\\\v1\\\\https\\\\repo1.maven.org\\\\maven2\\\\org\\\\mariadb\\\\jdbc\\\\mariadb-java-client\" -ErrorAction SilentlyContinue | Select-Object Name)",
+      "PowerShell(Start-Process \"C:\\\\Program Files\\\\Docker\\\\Docker\\\\Docker Desktop.exe\"; $d = \"C:\\\\Users\\\\WI137\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-WI137-OneDrive-Desktop-APS\\\\9554e605-c549-46a9-8226-2afd3e5101ae\\\\scratchpad\"; New-Item -ItemType Directory -Force $d | Out-Null; Invoke-WebRequest -UseBasicParsing \"https://repo1.maven.org/maven2/org/scala-sbt/sbt-launch/1.12.11/sbt-launch-1.12.11.jar\" -OutFile \"$d\\\\sbt-launch.jar\"; \\(Get-Item \"$d\\\\sbt-launch.jar\"\\).Length)",
+      "Bash(java -Dsbt.log.noformat=true -jar \"C:/Users/WI137/AppData/Local/Temp/claude/c--Users-WI137-OneDrive-Desktop-APS/9554e605-c549-46a9-8226-2afd3e5101ae/scratchpad/sbt-launch.jar\" -batch update)",
+      "Bash(java -Dsbt.log.noformat=true -Dsbt.server.forcestart=false -jar \"C:/Users/WI137/AppData/Local/Temp/claude/c--Users-WI137-OneDrive-Desktop-APS/9554e605-c549-46a9-8226-2afd3e5101ae/scratchpad/sbt-launch.jar\" compile)",
+      "Bash(docker info *)",
+      "Bash(docker volume *)",
+      "PowerShell($env:AERONET_DB_PORT = '3307'; docker compose -f docker-compose.yml -f docker-compose.us7.yml -p aeronet-us7 up -d db; $env:AERONET_DB_PORT = '3308'; docker compose -f docker-compose.yml -f docker-compose.us5.yml -p aeronet-us5 up -d db; Remove-Item Env:AERONET_DB_PORT; docker ps --format '{{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}')",
+      "PowerShell(Set-Location C:\\\\Users\\\\WI137\\\\OneDrive\\\\Desktop\\\\APS; $env:AERONET_DB_PORT = '3307'; docker compose -f docker-compose.yml -f docker-compose.us7.yml -p aeronet-us7 up -d db; $env:AERONET_DB_PORT = '3308'; docker compose -f docker-compose.yml -f docker-compose.us5.yml -p aeronet-us5 up -d db; Remove-Item Env:AERONET_DB_PORT; docker ps --format '{{.Names}}\\\\t{{.Status}}\\\\t{{.Ports}}')",
+      "Bash(npm install *)",
+      "Bash(npx vite *)",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }

@@ -1,0 +1,10 @@
+# Instancia aislada para las pruebas HTTP de edición de usuarios (US4).
+# Uso: docker compose -f docker-compose.yml -f docker-compose.us4.yml -p aeronet-us4 up -d db
+services:
+  db:
+    container_name: aeronet-us4-db
+    volumes:
+      - aeronet-us4-data:/var/lib/mysql
+
+volumes:
+  aeronet-us4-data:
