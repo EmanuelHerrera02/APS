@@ -1,8 +1,8 @@
-<!doctype html>
-<html lang="es">
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Factura {{invoice_number}}</title>
   <style>
     @page { size: A4; margin: 18mm; }
@@ -30,7 +30,7 @@
   <main class="invoice" aria-label="Factura de compra">
     <header>
       <div><h1>Factura</h1><p>{{issuer_name}}</p><p>{{issuer_tax_id}}</p></div>
-      <div><div class="type">{{invoice_type}}</div><p class="meta">N.º {{invoice_number}}<br>Fecha {{invoice_date}}</p></div>
+      <div><div class="type">{{invoice_type}}</div><p class="meta">N.º {{invoice_number}}<br />Fecha {{invoice_date}}</p></div>
     </header>
     <section class="parties">
       <div><div class="label">Receptor</div><p><strong>{{recipient_name}}</strong></p><p>CUIT: {{recipient_tax_id}}</p></div>

@@ -2,12 +2,12 @@
 // Requiere API AeroNet en http://localhost:8080, configurada para SMTP falso en 127.0.0.1:2525.
 // Uso: node tests/http/us10-flujo-integrado.mjs
 import net from 'node:net';
-import { api, createReport, sql } from './lib.mjs';
+import { api, apiUrl, createReport, sql } from './lib.mjs';
 
 const container = process.env.AERONET_TEST_DB_CONTAINER || 'aeronet-us8-http-db';
 const report = createReport('US10 — Emisión, correo y descarga');
 const messages = [];
-let rejectOneRecipient = true;
+const temporaryFailureRecipients = new Set();
 
 const smtp = net.createServer((socket) => {
   socket.setEncoding('utf8');
@@ -33,8 +33,7 @@ const smtp = net.createServer((socket) => {
       else if (/^RCPT TO:/i.test(line)) {
         const recipient = line.match(/<([^>]+)>/)?.[1]?.toLowerCase() || '';
         if (recipient.startsWith('bounce-')) socket.write('550 5.1.1 mailbox unavailable\r\n');
-        else if (rejectOneRecipient) {
-          rejectOneRecipient = false;
+        else if (temporaryFailureRecipients.delete(recipient)) {
           socket.write('450 4.2.0 temporary test failure\r\n');
         } else socket.write('250 2.1.5 recipient ok\r\n');
       } else if (/^DATA$/i.test(line)) { dataMode = true; socket.write('354 end with <CRLF>.<CRLF>\r\n'); }
@@ -94,6 +93,7 @@ try {
   });
 
   const owner = await register('owner');
+  temporaryFailureRecipients.add(owner.email.toLowerCase());
   const other = await register('other');
   const bounceUser = await register('bounce');
   const [candidate] = sql(container, `SELECT salida_id, clase, origen, destino, fecha
@@ -121,6 +121,46 @@ try {
   });
   report.check('U10-03', 'Pago aprobado genera factura, pasajes y email tras reintento temporal', Boolean(emailRow)
     && Number(emailRow?.[2]) === 2, emailRow ? `estado=${emailRow[1]}, intentos=${emailRow[2]}, latencia=${emailRow[3]}s` : 'no aceptado en 90s');
+
+  const webhookSecret = process.env.AERONET_EMAIL_WEBHOOK_SECRET;
+  if (!webhookSecret || webhookSecret.length < 32) throw new Error('Definí AERONET_EMAIL_WEBHOOK_SECRET (mínimo 32 caracteres) en el backend y en la prueba');
+  const deliveryEvent = {
+    eventId: `us10-delivered-${unique}`,
+    notificationId: Number(emailRow?.[0]),
+    status: 'DELIVERED',
+  };
+  const deliveryResponse = await fetch(`${apiUrl}/webhooks/email/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Aeronet-Webhook-Secret': webhookSecret },
+    body: JSON.stringify(deliveryEvent),
+  });
+  const deliveryBody = await deliveryResponse.json().catch(() => ({}));
+  report.check('U10-14', 'Webhook autenticado registra entrega del proveedor', deliveryResponse.status === 200
+    && deliveryBody.accepted === true
+    && sql(container, `SELECT estado FROM notificacion WHERE id=${Number(emailRow?.[0])};`)[0]?.[0] === 'ENTREGADA', `HTTP ${deliveryResponse.status}`);
+
+  const duplicateDelivery = await fetch(`${apiUrl}/webhooks/email/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Aeronet-Webhook-Secret': webhookSecret },
+    body: JSON.stringify(deliveryEvent),
+  });
+  report.check('U10-15', 'Repetir el mismo evento de entrega es idempotente', duplicateDelivery.status === 200
+    && Number(sql(container, `SELECT COUNT(*) FROM email_delivery_event WHERE provider_event_id='${deliveryEvent.eventId}';`)[0]?.[0]) === 1,
+  `HTTP ${duplicateDelivery.status}`);
+
+  const deliveryLatency = Number(sql(container, `SELECT TIMESTAMPDIFF(SECOND,n.created_at,e.received_at)
+    FROM email_delivery_event e JOIN notificacion n ON n.id=e.notification_id
+    WHERE e.provider_event_id='${deliveryEvent.eventId}';`)[0]?.[0]);
+  report.check('U10-16', 'Callback de entrega llega en menos de dos minutos', Number.isFinite(deliveryLatency)
+    && deliveryLatency >= 0 && deliveryLatency < 120, `${deliveryLatency}s`);
+
+  const unauthorizedEvent = await fetch(`${apiUrl}/webhooks/email/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Aeronet-Webhook-Secret': 'incorrect-secret' },
+    body: JSON.stringify({ ...deliveryEvent, eventId: `us10-unauthorized-${unique}` }),
+  });
+  report.check('U10-17', 'Webhook rechaza eventos sin el secreto correcto', unauthorizedEvent.status === 401,
+    `HTTP ${unauthorizedEvent.status}`);
 
   const listing = await api('/passenger/reservations', { token: owner.token });
   const owned = listing.body.reservations?.find((row) => row.id === purchase.reservationId);
@@ -154,6 +194,9 @@ try {
   report.check('U10-09', 'SMTP falso recibió mensaje con ambos adjuntos', messages.some((message) =>
     message.toLowerCase().includes(owner.email.toLowerCase()) && /factura-\d+\.pdf/i.test(message) && /pasaje-\d+\.pdf/i.test(message)),
   `estado DB=${emailData[0] || 'sin registro'}`);
+  report.check('U10-18', 'El email expone el ID de outbox para correlacionar webhooks', messages.some((message) =>
+    new RegExp(`^X-Aeronet-Notification-ID:\\s*${Number(emailRow?.[0])}\\s*$`, 'im').test(message)),
+  `notificación=${emailRow?.[0] || 'sin registro'}`);
 
   const bouncePurchase = await reserve(bounceUser, departureId, fareClass, 'B');
   payment(bouncePurchase.reservationId, 'APROBADO');

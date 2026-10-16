@@ -85,11 +85,11 @@ Este documento detalla la distribución de tareas para el Sprint 2. Está dividi
 **Objetivo:** Automatizar la generación de tickets electrónicos y facturas, y asegurar su entrega por email tras la confirmación del pago.
 
 ### Tareas a Implementar:
-- [ ] Diseñar templates (PDF/HTML) para pasaje electrónico y factura. *(3 horas)*
-- [ ] Desarrollar la lógica de generación de pasajes y factura post-confirmación de pago. *(5 horas)*
-- [ ] Configurar servidor/servicio de envío de correos (SPF, DKIM, DMARC) y sistema de colas/reintentos. *(4 horas)*
-- [ ] Implementar endpoint y UI para descarga manual de pasajes/factura desde la web. *(2 horas)*
-- [ ] Escribir y ejecutar pruebas de emisión, envío asíncrono, descargas y manejo de correos fallidos. *(3 horas)*
+- [x] Diseñar templates (PDF/HTML) para pasaje electrónico y factura. *(3 horas)*
+- [x] Desarrollar la lógica de generación de pasajes y factura post-confirmación de pago. *(5 horas)*
+- [ ] Configurar servidor/servicio de envío de correos (SPF, DKIM, DMARC) y sistema de colas/reintentos. *(4 horas)* Código de cola, reintentos y callbacks implementado; falta configurar proveedor real y publicar SPF/DKIM/DMARC del dominio.
+- [x] Implementar endpoint y UI para descarga manual de pasajes/factura desde la web. *(2 horas)*
+- [x] Escribir y ejecutar pruebas de emisión, envío asíncrono, descargas y manejo de correos fallidos. *(3 horas)* Prueba integrada: 18/18 casos aprobados.
 
 ### Criterios de Aceptación:
 - Envío automático de pasajes (con detalle de pasajero, vuelo, fecha, horario, clase) y factura por email al confirmar pago.

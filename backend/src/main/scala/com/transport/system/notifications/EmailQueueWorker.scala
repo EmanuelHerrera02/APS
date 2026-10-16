@@ -4,8 +4,14 @@ import jakarta.activation.FileDataSource
 import jakarta.mail.{Authenticator, Message, MessagingException, PasswordAuthentication, Session, Transport}
 import jakarta.mail.internet.{AddressException, InternetAddress, MimeBodyPart, MimeMessage, MimeMultipart}
 import java.nio.file.{Files, Path, Paths}
-import java.sql.{Connection, DriverManager, SQLException}
+import java.net.URI
+import java.net.http.{HttpClient, HttpRequest, HttpResponse}
+import java.time.Duration
+import java.sql.{Connection, DriverManager}
+import java.util.Base64
 import java.util.Properties
+import org.json4s._
+import org.json4s.native.JsonMethods._
 import org.slf4j.LoggerFactory
 
 private case class MailJob(id: Long, kind: String, recipient: String, purchaseId: Option[Long], attempts: Int)
@@ -19,8 +25,15 @@ object EmailQueueWorker {
   private val storageRoot = Paths.get(sys.env.getOrElse("AERONET_DOCUMENT_STORAGE", "var/documentos"))
     .toAbsolutePath.normalize()
 
-  def isConfigured: Boolean = Seq("AERONET_SMTP_HOST", "AERONET_SMTP_FROM")
-    .forall(key => sys.env.get(key).exists(_.trim.nonEmpty))
+  private def provider: String = sys.env.getOrElse("AERONET_EMAIL_PROVIDER", "smtp").trim.toLowerCase(java.util.Locale.ROOT)
+
+  def isConfigured: Boolean = provider match {
+    case "smtp" => Seq("AERONET_SMTP_HOST", "AERONET_SMTP_FROM")
+      .forall(key => sys.env.get(key).exists(_.trim.nonEmpty))
+    case "sendgrid" => Seq("AERONET_SENDGRID_API_KEY", "AERONET_SMTP_FROM")
+      .forall(key => sys.env.get(key).exists(_.trim.nonEmpty))
+    case _ => false
+  }
 
   private def db(): Connection = {
     val url = sys.env.getOrElse("AERONET_JDBC_URL", "")
@@ -181,10 +194,17 @@ object EmailQueueWorker {
   }
 
   private def send(job: MailJob, content: MailContent): Unit = {
+    if (provider == "sendgrid") {
+      sendWithSendGrid(job, content)
+      return
+    }
     val message = new MimeMessage(smtpSession())
     message.setFrom(new InternetAddress(sys.env("AERONET_SMTP_FROM")))
     message.setRecipients(Message.RecipientType.TO,
       InternetAddress.parse(job.recipient, false).map(address => address: jakarta.mail.Address))
+    // Providers that expose original/custom message headers can use this value to
+    // correlate delivery callbacks with the outbox row without exposing PII.
+    message.setHeader("X-Aeronet-Notification-ID", job.id.toString)
     message.setSubject(content.subject, "UTF-8")
     val multipart = new MimeMultipart()
     val text = new MimeBodyPart()
@@ -198,6 +218,42 @@ object EmailQueueWorker {
     }
     message.setContent(multipart)
     Transport.send(message)
+  }
+
+  /** Sends through SendGrid v3 while carrying a non-PII outbox ID into event callbacks. */
+  private def sendWithSendGrid(job: MailJob, content: MailContent): Unit = {
+    val attachments = content.attachments.map { path =>
+      val mimeType = Option(Files.probeContentType(path)).getOrElse("application/octet-stream")
+      JObject(
+        "content" -> JString(Base64.getEncoder.encodeToString(Files.readAllBytes(path))),
+        "type" -> JString(mimeType),
+        "filename" -> JString(path.getFileName.toString),
+        "disposition" -> JString("attachment")
+      )
+    }
+    val payload = JObject(
+      "personalizations" -> JArray(List(JObject(
+        "to" -> JArray(List(JObject("email" -> JString(job.recipient)))),
+        "custom_args" -> JObject("notification_id" -> JString(job.id.toString))
+      ))),
+      "from" -> JObject("email" -> JString(sys.env("AERONET_SMTP_FROM"))),
+      "subject" -> JString(content.subject),
+      "content" -> JArray(List(JObject("type" -> JString("text/plain"), "value" -> JString(content.body)))),
+      "headers" -> JObject("X-Aeronet-Notification-ID" -> JString(job.id.toString)),
+      "attachments" -> JArray(attachments)
+    )
+    val request = HttpRequest.newBuilder(URI.create("https://api.sendgrid.com/v3/mail/send"))
+      .timeout(Duration.ofSeconds(20))
+      .header("Authorization", s"Bearer ${sys.env("AERONET_SENDGRID_API_KEY")}")
+      .header("Content-Type", "application/json")
+      .POST(HttpRequest.BodyPublishers.ofString(compact(render(payload)), java.nio.charset.StandardCharsets.UTF_8))
+      .build()
+    val response = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+      .send(request, HttpResponse.BodyHandlers.ofString())
+    if (response.statusCode() != 202) {
+      // Never include response bodies: providers may echo recipient or account details.
+      throw new RuntimeException(s"SendGrid Mail Send rechazó el mensaje (HTTP ${response.statusCode()})")
+    }
   }
 
   private def permanentAddressFailure(error: Throwable): Boolean = {
@@ -248,16 +304,27 @@ object EmailQueueWorker {
           |  SUM(estado='ENVIADA' AND enviada_en >= DATE_SUB(NOW(), INTERVAL 1 HOUR)) AS accepted_last_hour,
           |  COALESCE(AVG(CASE WHEN estado='ENVIADA' AND enviada_en >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
           |    THEN TIMESTAMPDIFF(SECOND, created_at, enviada_en) END), 0) AS avg_latency_seconds,
+          |  SUM(estado='ENTREGADA' AND updated_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)) AS delivered_last_hour,
+          |  COALESCE(AVG(CASE WHEN estado='ENTREGADA' AND updated_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+          |    THEN (SELECT TIMESTAMPDIFF(SECOND, n.created_at, MIN(e.received_at))
+          |          FROM email_delivery_event e WHERE e.notification_id=n.id AND e.provider_status='DELIVERED') END), 0)
+          |    AS avg_delivery_seconds,
+          |  SUM(estado='ENTREGADA' AND updated_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
+          |    AND (SELECT TIMESTAMPDIFF(SECOND, n.created_at, MIN(e.received_at))
+          |         FROM email_delivery_event e WHERE e.notification_id=n.id AND e.provider_status='DELIVERED') < 120)
+          |    AS delivered_under_2m_last_hour,
           |  SUM(estado='REBOTADA' AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)) AS bounced_last_day,
           |  SUM(estado='FALLIDA' AND updated_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)) AS failed_last_day,
           |  SUM(estado='FALLIDA' AND intentos >= ?) AS exhausted_count
-          |FROM notificacion WHERE canal='EMAIL'""".stripMargin)
+          |FROM notificacion n WHERE canal='EMAIL'""".stripMargin)
       statement.setInt(1, maxAttempts)
       val rs = statement.executeQuery()
       try if (rs.next()) logger.info(
-        "email_queue_metrics active={} oldest_age_seconds={} accepted_last_hour={} avg_latency_seconds={} bounced_last_24h={} failed_last_24h={} exhausted={}",
+        "email_queue_metrics active={} oldest_age_seconds={} accepted_last_hour={} avg_acceptance_seconds={} delivered_last_hour={} avg_delivery_seconds={} delivered_under_2m_last_hour={} bounced_last_24h={} failed_last_24h={} exhausted={}",
         Long.box(rs.getLong("active_count")), Long.box(rs.getLong("oldest_age_seconds")),
         Long.box(rs.getLong("accepted_last_hour")), Double.box(rs.getDouble("avg_latency_seconds")),
+        Long.box(rs.getLong("delivered_last_hour")), Double.box(rs.getDouble("avg_delivery_seconds")),
+        Long.box(rs.getLong("delivered_under_2m_last_hour")),
         Long.box(rs.getLong("bounced_last_day")), Long.box(rs.getLong("failed_last_day")),
         Long.box(rs.getLong("exhausted_count")))
       finally { rs.close(); statement.close() }
