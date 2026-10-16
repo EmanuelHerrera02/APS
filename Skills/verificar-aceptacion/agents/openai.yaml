@@ -1,0 +1,4 @@
+interface:
+  display_name: "Verificar aceptación"
+  short_description: "Guarda y comprueba criterios por historia de usuario"
+  default_prompt: "Usa $verificar-aceptacion para revisar los criterios de aceptación de las historias de usuario."

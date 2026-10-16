@@ -322,11 +322,13 @@ CREATE TABLE pasaje (
   tipo_documento   ENUM('DNI','PASAPORTE','OTRO') NOT NULL,
   numero_documento VARCHAR(20)     NOT NULL,
   precio           DECIMAL(12,2)   NOT NULL,
+  ruta_pdf         VARCHAR(500)    NULL,       -- ubicación privada; NULL hasta generar el PDF
   estado           ENUM('RESERVADO','EMITIDO','CANCELADO') NOT NULL DEFAULT 'RESERVADO',
   created_at       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_pasaje_codigo (codigo),
+  UNIQUE KEY uq_pasaje_ruta_pdf (ruta_pdf),
   KEY ix_pasaje_compra (compra_id, salida_id),
   KEY ix_pasaje_ocupacion (salida_id, clase, estado),
   KEY ix_pasaje_documento (numero_documento, tipo_documento),
@@ -410,7 +412,7 @@ CREATE TABLE notificacion (
   salida_id         BIGINT UNSIGNED NULL,
   solicitado_por_id BIGINT UNSIGNED NULL,       -- empleado que pidió un REENVIO
   payload           JSON            NULL,       -- datos para la plantilla (horarios, etc.)
-  estado            ENUM('PENDIENTE','ENVIADA','FALLIDA') NOT NULL DEFAULT 'PENDIENTE',
+  estado            ENUM('PENDIENTE','PROCESANDO','ENVIADA','ENTREGADA','REBOTADA','FALLIDA') NOT NULL DEFAULT 'PENDIENTE',
   intentos          SMALLINT        NOT NULL DEFAULT 0,
   ultimo_error      VARCHAR(500)    NULL,
   programada_para   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -433,7 +435,8 @@ CREATE TABLE notificacion (
     REFERENCES usuario (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
   CONSTRAINT chk_notificacion_referencia CHECK (compra_id IS NOT NULL OR salida_id IS NOT NULL),
   CONSTRAINT chk_notificacion_intentos CHECK (intentos >= 0),
-  CONSTRAINT chk_notificacion_enviada CHECK (estado <> 'ENVIADA' OR enviada_en IS NOT NULL)
+  CONSTRAINT chk_notificacion_enviada CHECK (estado <> 'ENVIADA' OR enviada_en IS NOT NULL),
+  CONSTRAINT chk_notificacion_entregada CHECK (estado <> 'ENTREGADA' OR enviada_en IS NOT NULL)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================

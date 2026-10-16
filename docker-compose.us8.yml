@@ -1,0 +1,10 @@
+# Base aislada para ejecutar el flujo HTTP de compra de pasajes (US8).
+# Usar con -p aeronet-us8 y AERONET_DB_PORT=3312.
+services:
+  db:
+    container_name: aeronet-us8-http-db
+    volumes:
+      - aeronet-us8-data:/var/lib/mysql
+
+volumes:
+  aeronet-us8-data:

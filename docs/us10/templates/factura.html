@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Factura {{invoice_number}}</title>
+  <style>
+    @page { size: A4; margin: 18mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #182536; font: 14px/1.5 Arial, sans-serif; }
+    .invoice { max-width: 760px; margin: 24px auto; border: 1px solid #d5dfeb; padding: 30px; }
+    header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 2px solid #173b63; }
+    h1 { margin: 0; color: #173b63; font-size: 24px; }
+    h2 { margin: 22px 0 10px; color: #173b63; font-size: 14px; }
+    p { margin: 3px 0; }
+    .type { min-width: 72px; padding: 6px 12px; border: 1px solid #173b63; text-align: center; font-size: 20px; font-weight: 700; }
+    .meta { color: #63758a; text-align: right; }
+    .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; padding: 20px 0; }
+    .label { color: #63758a; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid #e4eaf1; text-align: left; }
+    th { color: #63758a; font-size: 11px; text-transform: uppercase; }
+    .amount { text-align: right; white-space: nowrap; }
+    .total { display: flex; justify-content: flex-end; gap: 30px; padding: 18px 8px; font-size: 18px; font-weight: 700; }
+    footer { margin-top: 24px; padding-top: 12px; border-top: 1px solid #e4eaf1; color: #63758a; font-size: 11px; }
+    @media print { .invoice { margin: 0; max-width: none; border: 0; padding: 0; } }
+  </style>
+</head>
+<body>
+  <main class="invoice" aria-label="Factura de compra">
+    <header>
+      <div><h1>Factura</h1><p>{{issuer_name}}</p><p>{{issuer_tax_id}}</p></div>
+      <div><div class="type">{{invoice_type}}</div><p class="meta">N.º {{invoice_number}}<br>Fecha {{invoice_date}}</p></div>
+    </header>
+    <section class="parties">
+      <div><div class="label">Receptor</div><p><strong>{{recipient_name}}</strong></p><p>CUIT: {{recipient_tax_id}}</p></div>
+      <div><div class="label">Compra</div><p>Código: {{purchase_code}}</p><p>Medio: {{payment_method}}</p></div>
+    </section>
+    <table>
+      <thead><tr><th>Detalle</th><th>Fecha</th><th>Clase</th><th class="amount">Importe</th></tr></thead>
+      <tbody><tr><td>{{description}}</td><td>{{travel_date}}</td><td>{{travel_class}}</td><td class="amount">{{line_total}}</td></tr></tbody>
+    </table>
+    <div class="total"><span>Total</span><span>{{currency}} {{invoice_total}}</span></div>
+    <footer>Comprobante asociado a la compra {{purchase_code}}. Conservar junto con el pasaje electrónico.</footer>
+  </main>
+</body>
+</html>

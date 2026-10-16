@@ -1,64 +1,73 @@
-# Tareas a realizar — etapa 1
+Ok, # Tareas a realizar — Sprint 2
 
-Esta lista recoge el alcance de primera etapa descrito por el responsable del proyecto. Conviene contrastarla con el backlog oficial cuando este disponible.
+## US8 — Compra de pasajes
 
-## US4 — Acceso por roles y permisos
+**Carga estimada:** 24 horas
 
-- [x] Diseñar el esquema de roles y permisos de los tres perfiles (4 horas).
-- [x] Implementar los tres roles: administrador (`ADMIN`), pasajero (`PASAJERO`) y empleado de mostrador (`MOSTRADOR`).
-- [x] Definir y mantener una asignacion coherente de permisos para cada rol en las capas que los consumen.
+- [ ] Diseñar el flujo de compra (vuelo y fecha, clase, cantidad y datos de los pasajeros) (4 horas).
+- [ ] Implementar la selección de clase (Economy/Primera) y cantidad de pasajes, aplicando límite de 9 por transacción (5 horas).
+- [ ] Implementar la carga de datos de cada pasajero (nombre, apellido, documento) con validaciones (4 horas).
+- [ ] Implementar el resumen de compra (vuelo, fecha, horario, clase, cantidad, importe total) (4 horas).
+- [ ] Registrar la compra en estado «pendiente de pago» (3 horas).
+- [ ] Escribir y ejecutar pruebas de compra (casos válidos e inválidos, validación de períodos de venta) (4 horas).
 
-### Alta e inicio de sesion
+**Criterios de aceptación:**
 
-- [x] Implementar el alta de usuarios y la autenticación (8 horas).
-- [x] Dar de alta los usuarios en la base de datos al registrarlos, con validacion de datos y contrasena almacenada como hash.
-- [x] Autenticar las credenciales cada vez que un usuario inicia sesion y rechazar cuentas deshabilitadas.
-- [x] Al autenticar, actualizar el ultimo acceso y entregar una credencial de sesion verificable para las solicitudes autenticadas.
-- [x] Restringir la asignacion de roles internos: el registro publico de pasajeros no debe permitir que el cliente se asigne rol de administrador o empleado.
+- Compra limitada a un rango de 1 a 9 pasajes por transacción.
+- Cálculo de importe según clase seleccionada (Economy o Primera).
+- Datos requeridos por cada pasajero previo al pago.
+- Resumen previo al pago completo (vuelo, fecha, horario, clase, cantidad, total).
+- Validación de que los vuelos estén dentro del período de venta y días de operación.
 
-### Acceso por permisos
+## US11 — Control de disponibilidad y sobreventa
 
-- [x] Implementar el control de acceso por perfil en la navegación (5 horas).
-- [x] Al entrar y navegar por la plataforma, mostrar y proteger las pantallas segun rol y permisos.
-- [x] Validar los permisos tambien en el backend en cada endpoint protegido; ocultar opciones en la interfaz no basta como control de acceso.
-- [x] Unificar los identificadores de roles y permisos usados por base de datos, backend y frontend.
+**Carga estimada:** 21 horas
 
-### Integracion y estado funcional
+- [ ] Diseñar el control de disponibilidad por vuelo, fecha y clase (3 horas).
+- [ ] Implementar reserva temporal de asientos durante el flujo de pago con liberación automática (TTL de 10 minutos) (6 horas).
+- [ ] Implementar la confirmación atómica de compra contra el inventario de disponibilidad (5 horas).
+- [ ] Agregar restricciones a nivel de base de datos para impedir superar la capacidad declarada (2 horas).
+- [ ] Realizar pruebas de estrés/concurrencia con compras simultáneas sobre los últimos asientos (5 horas).
 
-- [x] Probar los accesos con usuarios de los tres perfiles (3 horas).
-- [x] Conectar alta, login y autorizacion con persistencia real; reemplazar respuestas y datos de demostracion en estos flujos.
-- [x] Poder comprobar los flujos para los tres roles, incluyendo accesos permitidos y denegados.
+**Criterios de aceptación:**
 
-## US7 — Búsqueda de viajes
+- Ninguna compra simultánea puede confirmar más pasajes que la capacidad real.
+- Asientos reservados temporalmente durante el pago; liberación automática tras 10 minutos si no hay confirmación.
+- Aviso en pantalla si no hay disponibilidad suficiente antes del pago.
+- La búsqueda de vuelos debe descontar tanto ventas confirmadas como reservas vigentes.
 
-- [x] Diseñar la interfaz de búsqueda y de resultados (4 horas).
-- [x] Implementar la consulta por origen, destino y fechas (6 horas).
-- [x] Mostrar horarios, clases, precios y disponibilidad de cada opción (4 horas).
-- [x] Probar la búsqueda con distintos criterios y casos sin resultados (3 horas).
+## US9 — Pago en línea
 
-## US5 — Alta de vuelos
+**Carga estimada:** 32 horas
 
-- [x] Diseñar el formulario de alta de vuelo (4 horas).
-  - Definir campos: código, aeropuertos, horarios, desfase de llegada, período, días de operación y clases.
-  - Organizar el formulario por ruta y horario, período, días y capacidad/precio por clase.
-  - Incluir estados accesibles de carga, error y confirmación.
-- [x] Implementar las validaciones de los datos (días, horarios, período de venta, capacidades y precios) (6 horas).
-  - Validar campos obligatorios, formato del código y selección de aeropuertos distintos.
-  - Validar días, fechas, horarios y llegada el mismo día o al siguiente.
-  - Validar al menos una clase y capacidades/precios positivos dentro de los límites de base de datos.
-  - Repetir las validaciones de negocio en el backend y mapear conflictos de persistencia a errores entendibles.
-- [x] Implementar la persistencia del vuelo en la base de datos (5 horas).
-  - Proteger el endpoint con autenticación y permiso específico de alta de vuelos.
-  - Insertar vuelo, días y clases en una única transacción.
-  - Generar las salidas y sus capacidades por clase antes de confirmar la transacción.
-  - Registrar la acción en auditoría y revertir la operación completa ante fallos.
-- [x] Probar el alta con casos válidos e inválidos (3 horas).
-  - Verificar alta válida, incluyendo salidas y clases generadas.
-  - Rechazar campos inválidos, duplicación de código y acceso sin permiso.
-  - Comprobar atomicidad: un fallo no debe dejar vuelo, días, clases ni salidas parciales.
+- [ ] Seleccionar y configurar entorno de pruebas de la pasarela de pagos (4 horas).
+- [ ] Desarrollar módulo de integración aislado para la pasarela de pagos (8 horas).
+- [ ] Generar e implementar identificadores únicos (UUID) por transacción para evitar cobros duplicados (5 horas).
+- [ ] Implementar Webhooks/Polling para confirmación asincrónica de pago y estados (aprobado, rechazado, pendiente) (6 horas).
+- [ ] Desarrollar UI de pago seguro y mensajes de feedback al usuario (4 horas).
+- [ ] Probar flujo completo con tarjetas de prueba (aprobación, rechazo, pendiente) (5 horas).
 
-## US2 — Modelo y base de datos
+**Criterios de aceptación:**
 
-- [x] Definir las restricciones de integridad (capacidad por clase, estados de pasaje y de pago) (3 horas).
-- [x] Crear la base de datos con sus scripts iniciales (4 horas).
-- [x] Validar el modelo contra las historias del backlog (3 horas).
+- Datos de tarjeta procesados directamente en la pasarela (sistema local no guarda PAN ni CVV).
+- Transacciones con ID único, importe y estado rastreable.
+- Bloqueo de doble procesamiento (idempotencia en el pago).
+- Actualización de estado de la compra: aprobada confirma pasajes; rechazada libera reservas.
+- Pruebas exitosas contra el entorno sandbox de la pasarela.
+
+## US10 — Emisión de pasajes, facturación y notificaciones
+
+**Carga estimada:** 17 horas
+
+- [ ] Diseñar templates (PDF/HTML) para pasaje electrónico y factura (3 horas).
+- [ ] Desarrollar la lógica de generación de pasajes y factura post-confirmación de pago (5 horas).
+- [ ] Configurar servidor/servicio de envío de correos (SPF, DKIM, DMARC) y sistema de colas/reintentos (4 horas).
+- [ ] Implementar endpoint y UI para descarga manual de pasajes/factura desde la web (2 horas).
+- [ ] Escribir y ejecutar pruebas de emisión, envío asíncrono, descargas y manejo de correos fallidos (3 horas).
+
+**Criterios de aceptación:**
+
+- Envío automático de pasajes (con detalle de pasajero, vuelo, fecha, horario, clase) y factura por email al confirmar pago.
+- SLA de envío: email entregado en menos de 2 minutos tras confirmación.
+- Cola de reintentos automáticos para correos fallidos y registro de estados (entregado, rebotado, fallido).
+- Opción de descarga directa desde el portal web como alternativa al correo.

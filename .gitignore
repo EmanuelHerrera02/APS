@@ -5,6 +5,12 @@ frontend/node_modules/
 backend/target/
 backend/project/target/
 backend/.bsp/
+var/documentos/
 
 # Configuración local del IDE
 .idea/
+
+# Secretos y overrides de configuración local
+.env
+.env.*
+!.env.example

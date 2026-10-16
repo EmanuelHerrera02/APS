@@ -403,28 +403,34 @@ BEGIN NOT ATOMIC
   CALL registrar_pago(@c_t22, 200000.00, 'TARJETA_CREDITO', 'RECHAZADO', 'TEST-RECH-1', 'VISA', '0002', @p_t22, @r_t22);
   INSERT INTO resultado_test VALUES ('T22', 'Pago rechazado libera asientos',
     'crear_compra 2 ECONOMY + registrar_pago RECHAZADO',
-    'resultado CANCELADA; vendidos vuelve al valor previo',
+    'resultado CANCELADA; vendidos vuelve al valor previo; sin factura',
     COALESCE(v_err, CONCAT('resultado ', @r_t22, '; vendidos ',
       (SELECT vendidos FROM salida_clase WHERE salida_id = @s2 AND clase = 'ECONOMY'), ' (antes ', v_antes, ')')),
     v_err IS NULL AND @r_t22 = 'CANCELADA'
-      AND (SELECT vendidos FROM salida_clase WHERE salida_id = @s2 AND clase = 'ECONOMY') = v_antes);
+      AND (SELECT vendidos FROM salida_clase WHERE salida_id = @s2 AND clase = 'ECONOMY') = v_antes
+      AND (SELECT COUNT(*) FROM factura WHERE compra_id = @c_t22) = 0);
 END//
 
--- T23. Resultado esperado: pago APROBADO confirma la compra, emite los pasajes y
--- encola la notificación CONFIRMACION por email y push (María tiene app Android).
+-- T23. Resultado esperado: pago APROBADO confirma la compra, emite los pasajes,
+-- crea una factura y encola la notificación CONFIRMACION por email y push.
 BEGIN NOT ATOMIC
   DECLARE v_err VARCHAR(512) DEFAULT NULL;
   DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
   CALL crear_compra(@s3, @maria, NULL, 'MOVIL', 'maria.gonzalez@hotmail.com', @dos_eco, @c_t23);
   CALL registrar_pago(@c_t23, 200000.00, 'TARJETA_CREDITO', 'APROBADO', 'TEST-APR-1', 'VISA', '4242', @p_t23, @r_t23);
+  CALL emitir_factura_compra(@c_t23);
   INSERT INTO resultado_test VALUES ('T23', 'Pago aprobado confirma y notifica',
     'crear_compra + registrar_pago APROBADO',
-    'CONFIRMADA; 2 pasajes EMITIDO; 1 email + 1 push CONFIRMACION',
+    'CONFIRMADA; 2 pasajes EMITIDO; 1 factura; 1 email + 1 push CONFIRMACION',
     COALESCE(v_err, CONCAT((SELECT estado FROM compra WHERE id = @c_t23), '; ',
       (SELECT COUNT(*) FROM pasaje WHERE compra_id = @c_t23 AND estado = 'EMITIDO'), ' EMITIDO; ',
+      (SELECT COUNT(*) FROM factura WHERE compra_id = @c_t23), ' factura; ',
       (SELECT COUNT(*) FROM notificacion WHERE compra_id = @c_t23 AND tipo = 'CONFIRMACION'), ' notificaciones')),
     v_err IS NULL AND @r_t23 = 'CONFIRMADA'
       AND (SELECT COUNT(*) FROM pasaje WHERE compra_id = @c_t23 AND estado = 'EMITIDO') = 2
+      AND (SELECT COUNT(*) FROM factura WHERE compra_id = @c_t23) = 1
+      AND (SELECT tipo FROM factura WHERE compra_id = @c_t23) = 'C'
+      AND (SELECT total FROM factura WHERE compra_id = @c_t23) = 200000.00
       AND (SELECT COUNT(*) FROM notificacion WHERE compra_id = @c_t23 AND tipo = 'CONFIRMACION' AND canal = 'EMAIL') = 1
       AND (SELECT COUNT(*) FROM notificacion WHERE compra_id = @c_t23 AND tipo = 'CONFIRMACION' AND canal = 'PUSH') = 1);
 END//
@@ -568,7 +574,48 @@ BEGIN NOT ATOMIC
   INSERT INTO resultado_test VALUES ('T33', 'Estados de pago',
     'Control positivo: UPDATE pago APROBADO -> REEMBOLSADO', 'OK; estado REEMBOLSADO',
     COALESCE(v_err, CONCAT('OK; estado ', (SELECT estado FROM pago WHERE id = @p_t23))),
-    v_err IS NULL AND (SELECT estado FROM pago WHERE id = @p_t23) = 'REEMBOLSADO');
+      v_err IS NULL AND (SELECT estado FROM pago WHERE id = @p_t23) = 'REEMBOLSADO');
+END//
+
+-- T34. Resultado esperado: ERROR si la fecha de la salida no opera ese día.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE v_compras_antes INT;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  SET @fecha_no_operativa = CURDATE() + INTERVAL 8 DAY;
+  DELETE FROM vuelo_dia_operacion
+   WHERE vuelo_id = @v AND dia_semana = WEEKDAY(@fecha_no_operativa) + 1;
+  SET @salida_no_operativa = (SELECT id FROM salida WHERE vuelo_id = @v AND fecha = @fecha_no_operativa);
+  SET v_compras_antes = (SELECT COUNT(*) FROM compra);
+  CALL crear_compra(@salida_no_operativa, @juan, NULL, 'WEB', 'juan.perez@gmail.com', @uno_eco, @c_t34);
+  INSERT INTO resultado_test VALUES ('T34', 'Período y días de operación',
+    'Rechaza compra en fecha que no opera el vuelo',
+    'ERROR La salida está fuera del período de venta o el vuelo no opera ese día',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'La salida está fuera del período de venta o el vuelo no opera ese día%'
+      AND (SELECT COUNT(*) FROM compra) = v_compras_antes);
+END//
+
+-- T35. Resultado esperado: ERROR si se intenta vender una salida fuera del período.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE v_compras_antes INT;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  SET @fecha_fuera_periodo = CURDATE() + INTERVAL 31 DAY;
+  INSERT INTO salida (vuelo_id, aeropuerto_origen_id, aeropuerto_destino_id, fecha, hora_partida, hora_llegada)
+  SELECT id, aeropuerto_origen_id, aeropuerto_destino_id, @fecha_fuera_periodo, hora_partida, hora_llegada
+    FROM vuelo WHERE id = @v;
+  SET @salida_fuera_periodo = LAST_INSERT_ID();
+  INSERT INTO salida_clase (salida_id, clase, capacidad, vendidos)
+  SELECT @salida_fuera_periodo, clase, capacidad, 0 FROM vuelo_clase WHERE vuelo_id = @v;
+  SET v_compras_antes = (SELECT COUNT(*) FROM compra);
+  CALL crear_compra(@salida_fuera_periodo, @juan, NULL, 'WEB', 'juan.perez@gmail.com', @uno_eco, @c_t35);
+  INSERT INTO resultado_test VALUES ('T35', 'Período y días de operación',
+    'Rechaza compra después de la fecha final del vuelo',
+    'ERROR La salida está fuera del período de venta o el vuelo no opera ese día',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'La salida está fuera del período de venta o el vuelo no opera ese día%'
+      AND (SELECT COUNT(*) FROM compra) = v_compras_antes);
 END//
 
 DELIMITER ;
@@ -581,7 +628,7 @@ SELECT caso, requisito, prueba, esperado, obtenido,
   FROM resultado_test ORDER BY caso;
 
 SELECT COUNT(*) AS casos, SUM(ok) AS pasan, SUM(NOT ok) AS fallan,
-       IF(SUM(NOT ok) = 0 AND COUNT(*) = 33, 'TODOS LOS CASOS PASAN', 'HAY CASOS QUE FALLAN') AS resumen
+       IF(SUM(NOT ok) = 0 AND COUNT(*) = 35, 'TODOS LOS CASOS PASAN', 'HAY CASOS QUE FALLAN') AS resumen
   FROM resultado_test;
 
 SET @casos_ok = (SELECT COUNT(*) FROM resultado_test WHERE ok);
@@ -591,7 +638,7 @@ ROLLBACK;
 -- Termina con error si algún caso falló o no se ejecutó (útil en CI).
 DELIMITER //
 BEGIN NOT ATOMIC
-  IF @casos_ok <> 33 THEN
+  IF @casos_ok <> 35 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '04_tests.sql: hay casos que fallan';
   END IF;
 END//

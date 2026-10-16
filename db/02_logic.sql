@@ -215,6 +215,25 @@ BEGIN
 
   SELECT COUNT(*) INTO v_ok
     FROM salida s JOIN vuelo v ON v.id = s.vuelo_id
+   WHERE s.id = NEW.salida_id;
+  IF v_ok = 0 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La salida no existe';
+  END IF;
+
+  SELECT COUNT(*) INTO v_ok
+    FROM salida s
+    JOIN vuelo v ON v.id = s.vuelo_id
+    JOIN vuelo_dia_operacion d ON d.vuelo_id = v.id
+   WHERE s.id = NEW.salida_id
+     AND s.fecha BETWEEN v.fecha_desde AND v.fecha_hasta
+     AND d.dia_semana = WEEKDAY(s.fecha) + 1;
+  IF v_ok = 0 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'La salida está fuera del período de venta o el vuelo no opera ese día';
+  END IF;
+
+  SELECT COUNT(*) INTO v_ok
+    FROM salida s JOIN vuelo v ON v.id = s.vuelo_id
    WHERE s.id = NEW.salida_id
      AND s.estado = 'PROGRAMADA'
      AND v.estado = 'ACTIVO'
@@ -633,8 +652,33 @@ BEGIN
   IF v_tx_propia THEN COMMIT; END IF;
 END//
 
+-- Crea los metadatos de factura interna de una compra confirmada. La clave única
+-- por compra y el NOT EXISTS hacen que repetir la llamada no duplique la factura.
+-- La numeración INT-* es interna: la numeración fiscal debe configurarse según
+-- el emisor antes de usarla como comprobante fiscal.
+CREATE PROCEDURE emitir_factura_compra(IN p_compra_id BIGINT UNSIGNED)
+MODIFIES SQL DATA
+BEGIN
+  DECLARE v_estado VARCHAR(20) DEFAULT NULL;
+  SELECT estado INTO v_estado FROM compra WHERE id = p_compra_id FOR UPDATE;
+  IF v_estado IS NULL OR v_estado <> 'CONFIRMADA' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Solo se emite factura para compras CONFIRMADAS';
+  END IF;
+
+  INSERT INTO factura (compra_id, numero, tipo, total, receptor_nombre)
+  SELECT c.id, CONCAT('INT-', c.codigo), 'C', c.total,
+         COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.nombre, u.apellido)), ''),
+                  (SELECT NULLIF(TRIM(CONCAT_WS(' ', p.nombre, p.apellido)), '')
+                     FROM pasaje p WHERE p.compra_id = c.id ORDER BY p.id LIMIT 1),
+                  c.email_contacto)
+    FROM compra c
+    LEFT JOIN usuario u ON u.id = c.usuario_id
+   WHERE c.id = p_compra_id
+     AND NOT EXISTS (SELECT 1 FROM factura f WHERE f.compra_id = c.id);
+END//
+
 -- Registra el resultado de un pago y aplica su efecto sobre la compra:
---   APROBADO  + compra PENDIENTE_PAGO -> CONFIRMADA (emite pasajes, encola email/push)
+--   APROBADO  + compra PENDIENTE_PAGO -> CONFIRMADA (emite pasajes, factura interna y encola email/push)
 --   APROBADO  + compra ya no pendiente -> se registra; p_resultado = REQUIERE_REEMBOLSO
 --   RECHAZADO + compra PENDIENTE_PAGO -> CANCELADA (libera asientos)
 --   otros casos -> solo se registra el pago
@@ -677,6 +721,7 @@ BEGIN
 
   IF p_estado = 'APROBADO' AND v_estado = 'PENDIENTE_PAGO' THEN
     UPDATE compra SET estado = 'CONFIRMADA' WHERE id = p_compra_id;
+    CALL emitir_factura_compra(p_compra_id);
 
     INSERT INTO notificacion (tipo, canal, destinatario, usuario_id, compra_id, salida_id)
     SELECT 'CONFIRMACION', 'EMAIL', c.email_contacto, c.usuario_id, c.id, c.salida_id

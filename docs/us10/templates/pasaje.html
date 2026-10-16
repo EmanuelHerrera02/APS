@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pasaje electrónico {{ticket_code}}</title>
+  <style>
+    @page { size: A4; margin: 18mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #182536; font: 14px/1.5 Arial, sans-serif; }
+    .ticket { max-width: 760px; margin: 24px auto; border: 1px solid #d5dfeb; border-radius: 12px; overflow: hidden; }
+    header { padding: 24px 28px; color: white; background: #173b63; }
+    header p { margin: 0; color: #d9e8f7; }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    h2 { margin: 0 0 14px; color: #173b63; font-size: 15px; }
+    section { padding: 20px 28px; border-bottom: 1px solid #e4eaf1; }
+    dl { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; margin: 0; }
+    dt { color: #63758a; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+    dd { margin: 2px 0 0; font-weight: 700; }
+    .route { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .route strong { font-size: 20px; }
+    footer { padding: 14px 28px; color: #63758a; font-size: 11px; }
+    @media print { .ticket { margin: 0; max-width: none; border-radius: 0; } }
+  </style>
+</head>
+<body>
+  <main class="ticket" aria-label="Pasaje electrónico">
+    <header>
+      <h1>Pasaje electrónico</h1>
+      <p>Código {{ticket_code}} · Compra {{purchase_code}}</p>
+    </header>
+    <section>
+      <h2>Pasajero</h2>
+      <dl>
+        <div><dt>Nombre completo</dt><dd>{{passenger_name}}</dd></div>
+        <div><dt>Documento</dt><dd>{{document_type}} · {{document_number}}</dd></div>
+        <div><dt>Clase</dt><dd>{{travel_class}}</dd></div>
+      </dl>
+    </section>
+    <section>
+      <h2>Vuelo</h2>
+      <div class="route"><strong>{{origin}}</strong><span aria-hidden="true">→</span><strong>{{destination}}</strong></div>
+      <dl>
+        <div><dt>Vuelo</dt><dd>{{flight_code}}</dd></div>
+        <div><dt>Fecha</dt><dd>{{travel_date}}</dd></div>
+        <div><dt>Salida</dt><dd>{{departure_time}}</dd></div>
+        <div><dt>Llegada</dt><dd>{{arrival_time}}</dd></div>
+      </dl>
+    </section>
+    <footer>Presentá este pasaje y un documento válido al embarcar. Emitido: {{issued_at}}.</footer>
+  </main>
+</body>
+</html>

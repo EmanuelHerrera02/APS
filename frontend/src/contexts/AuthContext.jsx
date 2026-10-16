@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 const AuthContext = createContext(null);
 const ACCESS_KEY = 'aeronet.accessToken';
@@ -34,11 +34,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   const request = useCallback(async (path, options = {}) => {
+    const { responseType, ...fetchOptions } = options;
     const send = (token) => fetch(`${apiUrl}${path}`, {
-      ...options,
+      ...fetchOptions,
       headers: {
         Accept: 'application/json',
-        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(fetchOptions.body ? { 'Content-Type': 'application/json' } : {}),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options.headers,
       },
@@ -60,6 +61,13 @@ export function AuthProvider({ children }) {
           clearSession();
         }
       }
+    }
+    if (responseType === 'blob') {
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'No se pudo descargar el documento.');
+      }
+      return response.blob();
     }
     return readResponse(response);
   }, [acceptSession, clearSession]);

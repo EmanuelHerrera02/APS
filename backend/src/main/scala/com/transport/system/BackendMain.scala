@@ -1,6 +1,7 @@
 package com.transport.system
 
 import com.transport.system.controllers.{AdminController, AuthController, EmployeeController, PassengerController}
+import com.transport.system.documents.DocumentGenerationLifecycle
 import jakarta.servlet.{DispatcherType, Filter, FilterChain, ServletRequest, ServletResponse}
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.ee10.servlet.{FilterHolder, ServletContextHandler, ServletHolder}
@@ -15,6 +16,7 @@ object BackendMain {
     val server = new Server(port)
     val context = new ServletContextHandler()
     context.setContextPath("/")
+    context.addEventListener(new DocumentGenerationLifecycle)
     context.addFilter(new FilterHolder(new LocalCorsFilter), "/*", EnumSet.of(DispatcherType.REQUEST))
     context.addServlet(new ServletHolder(new AuthController), "/auth/*")
     context.addServlet(new ServletHolder(new PassengerController), "/passenger/*")

@@ -12,12 +12,12 @@ Este documento detalla la distribución de tareas para el Sprint 2. Está dividi
 **Objetivo:** Permitir al pasajero seleccionar clase, cantidad de pasajes (máximo 9) y cargar datos de los acompañantes, generando un resumen antes del pago.
 
 ### Tareas a Implementar:
-- [ ] Diseñar el flujo de compra (vuelo y fecha, clase, cantidad y datos de los pasajeros). *(4 horas)*
-- [ ] Implementar la selección de clase (Economy/Primera) y cantidad de pasajes, aplicando límite de 9 por transacción. *(5 horas)*
-- [ ] Implementar la carga de datos de cada pasajero (nombre, apellido, documento) con validaciones. *(4 horas)*
-- [ ] Implementar el resumen de compra (vuelo, fecha, horario, clase, cantidad, importe total). *(4 horas)*
-- [ ] Registrar la compra en estado "pendiente de pago". *(3 horas)*
-- [ ] Escribir y ejecutar pruebas de compra (casos válidos e inválidos, validación de períodos de venta). *(4 horas)*
+- [x] Diseñar el flujo de compra (vuelo y fecha, clase, cantidad y datos de los pasajeros). *(4 horas)*
+- [x] Implementar la selección de clase (Economy/Primera) y cantidad de pasajes, aplicando límite de 9 por transacción. *(5 horas)*
+- [x] Implementar la carga de datos de cada pasajero (nombre, apellido, documento) con validaciones. *(4 horas)*
+- [x] Implementar el resumen de compra (vuelo, fecha, horario, clase, cantidad, importe total). *(4 horas)*
+- [x] Registrar la compra en estado "pendiente de pago". *(3 horas)*
+- [x] Escribir y ejecutar pruebas de compra (casos válidos e inválidos, validación de períodos de venta). *(4 horas)*
 
 ### Criterios de Aceptación:
 - Compra limitada a un rango de 1 a 9 pasajes por transacción.
