@@ -43,7 +43,7 @@ Todos los comandos se corren desde la raíz del repo y funcionan igual en PowerS
 > de `down -v`). Si alguien cambió los scripts y hacés `git pull`, tenés que hacer
 > `docker compose down -v` para que se apliquen. Esto borra tus datos locales.
 
-La corrida de tests termina con `26  26  0  TODOS LOS CASOS PASAN`. Los tests se ejecutan dentro
+La corrida de tests termina con `37  37  0  TODOS LOS CASOS PASAN`. Los tests se ejecutan dentro
 de una transacción que se deshace, así que no ensucian la base y se pueden correr las veces que
 quieras.
 
@@ -138,7 +138,7 @@ SELECT id, codigo, canal, estado, total, email_contacto FROM compra;
 - **`salida_clase`** tiene la `capacidad` y los `vendidos` de cada salida y clase.
 - Una **`compra`** es sobre una sola salida y tiene de 1 a 9 **`pasaje`s**. Cada pasaje tiene su
   clase y los datos de la persona que viaja (los acompañantes no necesitan cuenta).
-- Una compra nace en `PENDIENTE_PAGO` y **ya reserva los asientos**. Tiene 15 minutos para
+- Una compra nace en `PENDIENTE_PAGO` y **ya reserva los asientos**. Tiene 10 minutos para
   pagarse; si no, pasa sola a `EXPIRADA` y los asientos se liberan (la base lo hace cada minuto).
 - Las **notificaciones** no se envían desde la base: la base las deja en la tabla `notificacion`
   y un proceso del backend las envía (ver [5.6](#56-enviar-notificaciones-worker)).
@@ -151,7 +151,7 @@ SELECT id, codigo, canal, estado, total, email_contacto FROM compra;
 compra:   PENDIENTE_PAGO ──pago aprobado──▶ CONFIRMADA ──▶ CANCELADA
                 │
                 ├──pago rechazado / cancelación──▶ CANCELADA
-                └──pasan 15 min──▶ EXPIRADA
+                └──pasan 10 min──▶ EXPIRADA
 
 pasaje:   RESERVADO ──▶ EMITIDO ──▶ CANCELADO   (cambian solos con la compra)
 salida:   PROGRAMADA ──▶ CANCELADA
@@ -549,7 +549,7 @@ Otros errores de MariaDB que pueden aparecer:
 1. Editar el script que corresponda: `01_schema.sql` (tablas), `02_logic.sql` (triggers y
    procedimientos) o `03_seed.sql` (datos).
 2. Si cambia una regla, agregar o ajustar un caso en `04_tests.sql`, y actualizar el total
-   esperado (`33`) al final del archivo.
+   esperado (`37`) al final del archivo.
 3. Recrear la base y correr los tests:
    ```
    docker compose down -v
@@ -581,7 +581,7 @@ Convenciones:
 | Cambié los scripts y no veo los cambios | Los scripts solo corren con la base vacía: `docker compose down -v` y `docker compose up -d`. |
 | `docker compose ps` no llega a `healthy` | Falló un script de inicio: `docker compose logs db` y buscar `ERROR`. |
 | `Sin disponibilidad` / `La salida no está disponible para la venta` al probar | Estás usando una salida pasada, cancelada o agotada. Buscá una en `v_disponibilidad`. |
-| La compra de prueba se me vence sola | Es lo esperado: las reservas vencen a los 15 minutos. Para pruebas manuales: `UPDATE compra SET expira_en = NOW() + INTERVAL 1 DAY WHERE id = ?;` |
+| La compra de prueba se me vence sola | Es lo esperado: las reservas vencen a los 10 minutos. Para pruebas manuales: `UPDATE compra SET expira_en = NOW() + INTERVAL 1 DAY WHERE id = ?;` |
 | Las reservas vencidas **no** se liberan | Verificar `SELECT @@event_scheduler;` (tiene que dar `ON`). Se puede forzar con `CALL liberar_reservas_vencidas();` |
 | Fechas u horas corridas 3 horas | Revisar que el contenedor tenga `TZ: America/Argentina/Buenos_Aires` (ya está en el `docker-compose.yml`) y que la base se haya creado con esa versión: si no, `docker compose down -v` y `up -d`. |
 | Tildes rotas (`GonzÃ¡lez`) en la consola | Conectarse con `--default-character-set=utf8mb4`. En los clientes gráficos, usar codificación UTF-8. |

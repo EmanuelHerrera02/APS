@@ -1,0 +1,11 @@
+# Base aislada para ejecutar las pruebas de disponibilidad, TTL de 10 minutos y concurrencia (US11).
+# Usar con -p aeronet-us11 y AERONET_DB_PORT=3313.
+services:
+  db:
+    container_name: aeronet-us11-db
+    volumes:
+      - aeronet-us11-data:/var/lib/mysql
+
+volumes:
+  aeronet-us11-data:
+

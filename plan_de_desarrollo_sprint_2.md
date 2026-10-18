@@ -37,11 +37,11 @@ Este documento detalla la distribución de tareas para el Sprint 2. Está dividi
 **Objetivo:** Garantizar la integridad de los asientos disponibles, implementando reservas temporales y bloqueos de concurrencia para evitar sobreventa.
 
 ### Tareas a Implementar:
-- [ ] Diseñar el control de disponibilidad por vuelo, fecha y clase. *(3 horas)*
-- [ ] Implementar reserva temporal de asientos durante el flujo de pago con liberación automática (TTL de 10 minutos). *(6 horas)*
-- [ ] Implementar la confirmación atómica de compra contra el inventario de disponibilidad. *(5 horas)*
-- [ ] Agregar restricciones a nivel de base de datos para impedir superar la capacidad declarada. *(2 horas)*
-- [ ] Realizar pruebas de estrés/concurrencia con compras simultáneas sobre los últimos asientos. *(5 horas)*
+- [x] Diseñar el control de disponibilidad por vuelo, fecha y clase. *(3 horas)*
+- [x] Implementar reserva temporal de asientos durante el flujo de pago con liberación automática (TTL de 10 minutos). *(6 horas)*
+- [x] Implementar la confirmación atómica de compra contra el inventario de disponibilidad. *(5 horas)*
+- [x] Agregar restricciones a nivel de base de datos para impedir superar la capacidad declarada. *(2 horas)*
+- [x] Realizar pruebas de estrés/concurrencia con compras simultáneas sobre los últimos asientos. *(5 horas)*
 
 ### Criterios de Aceptación:
 - Ninguna compra simultánea puede confirmar más pasajes que la capacidad real.

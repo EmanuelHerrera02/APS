@@ -8,8 +8,8 @@ SQL puro, sin ORM.
 | [db/01_schema.sql](../db/01_schema.sql) | Base, tablas, PK/FK/UNIQUE/CHECK, índices y vistas |
 | [db/02_logic.sql](../db/02_logic.sql) | Triggers, procedimientos almacenados y evento programado |
 | [db/03_seed.sql](../db/03_seed.sql) | Datos de prueba (10 aeropuertos, 4 vuelos, 6 usuarios, 7 compras) |
-| [db/04_tests.sql](../db/04_tests.sql) | 33 casos que verifican restricciones y lógica |
-| [db/05_migration_flight_create_permission.sql](../db/05_migration_flight_create_permission.sql), [db/06_migration_pago_estados.sql](../db/06_migration_pago_estados.sql) | Migraciones idempotentes para bases creadas antes de esos cambios |
+| [db/04_tests.sql](../db/04_tests.sql) | 37 casos que verifican restricciones y lógica |
+| [db/05_migration_flight_create_permission.sql](../db/05_migration_flight_create_permission.sql), [db/06_migration_pago_estados.sql](../db/06_migration_pago_estados.sql), [db/migrations/20261018_us11_disponibilidad_ttl.sql](../db/migrations/20261018_us11_disponibilidad_ttl.sql) | Migraciones idempotentes para bases creadas antes de esos cambios |
 | [docker-compose.yml](../docker-compose.yml) | MariaDB que carga 01 → 02 → 03 al crear el volumen |
 
 ```bash
@@ -285,9 +285,10 @@ capacidad y el precio tienen que ser mayores que 0. Un vuelo sin Primera simplem
 |---|---|
 | `generar_salidas(vuelo_id)` | Crea una `salida` por cada día de operación dentro del período y su `salida_clase` por clase. Es **idempotente**: se vuelve a llamar después de extender el período, agregar días o agregar una clase. |
 | `reservar_asientos(salida_id, clase, n)` | Reserva atómica: `UPDATE salida_clase SET vendidos = vendidos + n WHERE … AND vendidos + n <= capacidad`. Si afecta 0 filas, aborta con un mensaje que distingue entre "sin disponibilidad" y "salida no vendible". |
-| `crear_compra(salida, usuario, empleado, canal, email, pasajeros_json, OUT compra_id)` | Flujo completo de venta: valida de 1 a 9 pasajeros, crea la compra `PENDIENTE_PAGO`, reserva asientos por clase, inserta los pasajes con el precio vigente y calcula el total. Es todo o nada. |
-| `registrar_pago(compra, monto, medio, estado, id_tx, marca, ultimos_4, OUT pago_id, OUT resultado)` | Registra el pago y aplica su efecto. `APROBADO` confirma la compra (emite pasajes y encola la `CONFIRMACION`). `RECHAZADO` la cancela (libera asientos). Un pago aprobado sobre una compra ya vencida se registra igual y devuelve `REQUIERE_REEMBOLSO`. |
-| `liberar_reservas_vencidas()` | Pasa a `EXPIRADA` las compras `PENDIENTE_PAGO` con `expira_en` vencido. Los triggers cancelan sus pasajes y devuelven los asientos. Devuelve cuántas compras y asientos liberó. |
+| `crear_compra(salida, usuario, empleado, canal, email, pasajeros_json, OUT compra_id)` | Flujo completo de venta: valida de 1 a 9 pasajeros, crea la compra `PENDIENTE_PAGO` (TTL de 10 minutos), reserva asientos por clase, inserta los pasajes con el precio vigente y calcula el total. Es todo o nada. |
+| `confirmar_compra(compra_id)` | Bloquea `compra` y `salida_clase` (`FOR UPDATE`), verifica que la reserva no esté vencida ni supere la capacidad y confirma atómicamente la compra (`PENDIENTE_PAGO → CONFIRMADA`). |
+| `registrar_pago(compra, monto, medio, estado, id_tx, marca, ultimos_4, OUT pago_id, OUT resultado)` | Registra el pago y aplica su efecto. Si la reserva estaba vencida (`expira_en <= NOW()`), la expira primero. `APROBADO` confirma la compra con `confirmar_compra()` (emite pasajes y encola la `CONFIRMACION`). `RECHAZADO` la cancela (libera asientos). Un pago aprobado sobre una compra ya vencida se registra igual y devuelve `REQUIERE_REEMBOLSO`. |
+| `liberar_reservas_vencidas()` | Pasa a `EXPIRADA` las compras `PENDIENTE_PAGO` con `expira_en <= NOW()`. Los triggers cancelan sus pasajes y devuelven los asientos. Devuelve cuántas compras y asientos liberó. |
 | `reenviar_documentacion(compra, solicitante, email)` | Encola un `REENVIO` de pasajes y factura (por ejemplo, pedido en mostrador). |
 
 Los procedimientos de varios pasos abren su propia transacción si se los llama en modo
@@ -327,8 +328,8 @@ exactamente 12 aceptadas y 13 rechazadas.
 | `salida` | `bu` | Una salida cancelada no se reprograma. `vuelo_id` y `fecha` son inmutables. |
 | `salida` | `au` | Ante cancelación o cambio de horario, encola notificaciones (email por compra activa + push por dispositivo del comprador). Al cancelar, también cancela las compras aún impagas. |
 | `salida_clase` | `bu` | La capacidad no puede quedar por debajo de `vendidos`. |
-| `compra` | `bi` | Nace en `PENDIENTE_PAGO`, sobre una salida vendible. Valida comprador y empleado (activo y con rol interno). Genera el localizador. `expira_en` por defecto es +15 min. |
-| `compra` | `bu` | Máquina de estados: `PENDIENTE_PAGO → CONFIRMADA / CANCELADA / EXPIRADA` y `CONFIRMADA → CANCELADA`. Los estados finales no se reabren. |
+| `compra` | `bi` | Nace en `PENDIENTE_PAGO`, sobre una salida vendible. Valida comprador y empleado (activo y con rol interno). Genera el localizador. `expira_en` por defecto es +10 min. |
+| `compra` | `bu` | Máquina de estados: `PENDIENTE_PAGO → CONFIRMADA / CANCELADA / EXPIRADA` y `CONFIRMADA → CANCELADA`. Rechaza confirmar una reserva vencida (`expira_en <= NOW()`) o sin inventario válido. Los estados finales no se reabren. |
 | `compra` | `au` | `CONFIRMADA` emite los pasajes. `CANCELADA` o `EXPIRADA` los cancela. |
 | `pasaje` | `bi` | Hasta 9 por compra. Solo en compras pendientes. Exige asiento reservado. Congela el precio si no viene. Genera el código. |
 | `pasaje` | `bu` | Compra, salida, clase, precio y código son inmutables. Transiciones: `RESERVADO → EMITIDO / CANCELADO` y `EMITIDO → CANCELADO`. |
@@ -370,8 +371,8 @@ exactamente 12 aceptadas y 13 rechazadas.
    de la misma salida y clase.
 
 7. **La reserva temporal cuenta en `vendidos`.** Una compra `PENDIENTE_PAGO` ya ocupa su asiento
-   (así no se sobrevende mientras el pasajero paga) y vence a los **15 minutos**. Se libera al
-   expirar (evento cada minuto), al cancelar o si el pago se rechaza.
+   (así no se sobrevende mientras el pasajero paga) y vence a los **10 minutos**. Se libera al
+   expirar (evento cada minuto o al consultar disponibilidad), al cancelar o si el pago se rechaza.
 
 8. **Precio congelado** en `pasaje.precio`. `vuelo_clase.precio` es el precio vigente y puede
    cambiar sin afectar lo ya vendido. `compra.total` es la suma de sus pasajes.
@@ -482,18 +483,19 @@ enunciado figura **sin número**; se asigna cuando el equipo lo confirme, sin ca
 | — | Push en la app móvil | `dispositivo_usuario`, `notificacion` (`PUSH`) | tokens por usuario; push encolado junto al email |
 | — | Admin gestiona cuentas internas (crear, modificar, deshabilitar) | `usuario` (`MOSTRADOR`, `ADMIN`) | `activo`, borrado físico bloqueado |
 | — | Pasajero consulta sus compras y pasajes (web y app) | `compra`, `pasaje`, `factura` | `ix_compra_usuario` |
-| — | Vencimiento de reservas impagas | `compra`, `salida_clase` | `liberar_reservas_vencidas()`, evento cada minuto |
+| US11 | Vencimiento de reservas impagas y control de disponibilidad/sobreventa | `compra`, `salida_clase`, `pasaje` | `chk_salida_clase_vendidos`, `reservar_asientos()`, `confirmar_compra()`, `liberar_reservas_vencidas()` (TTL 10 min, evento cada minuto) |
 
-### Validación del modelo contra las historias implementadas (2026-10-04)
+### Validación del modelo contra las historias implementadas (2026-10-18)
 
-Cada historia de la etapa 1 se ejecutó contra una base creada desde cero con `01`–`03`:
+Cada historia se ejecutó contra una base creada desde cero con `01`–`03`:
 
 | US | Qué se comprobó | Evidencia | Resultado |
 |---|---|---|---|
-| US2 | Capacidad por clase, límite de 9 pasajes, estados de compra, pasaje y pago, reservas vencidas, notificaciones, borrado lógico | [db/04_tests.sql](../db/04_tests.sql) | 33/33 |
+| US2 | Capacidad por clase, límite de 9 pasajes, estados de compra, pasaje y pago, reservas vencidas, notificaciones, borrado lógico | [db/04_tests.sql](../db/04_tests.sql) | 37/37 |
 | US4 | Login con hash, roles y permisos leídos de `rol_permiso`, denegaciones por rol, edición de cuentas (datos, `activo`, `rol`) con auditoría | [tests/http/us4-edicion-usuarios.mjs](../tests/http/us4-edicion-usuarios.mjs) y accesos A01–A05 de [pruebas-alta-vuelos.md](pruebas-alta-vuelos.md) | 23/23 |
 | US5 | Alta de vuelo con días, clases, salidas y capacidades por salida en una transacción; rechazo de datos inválidos y duplicados; auditoría | [tests/http/us5-alta-vuelos.mjs](../tests/http/us5-alta-vuelos.mjs) | 47/47 |
 | US7 | Búsqueda por código, ciudad o aeropuerto y rango de fechas; clases agotadas; casos sin resultados | [tests/http/us7-busqueda.mjs](../tests/http/us7-busqueda.mjs) | 18/18 |
+| US11 | Control de disponibilidad por vuelo/fecha/clase, reserva temporal con TTL de 10 min, confirmación atómica y concurrencia sobre últimos asientos | [tests/http/us11-disponibilidad-concurrencia.mjs](../tests/http/us11-disponibilidad-concurrencia.mjs) y [pruebas-disponibilidad-sobreventa.md](pruebas-disponibilidad-sobreventa.md) | 6/6 (`--self-test`) + T36–T37 |
 
 Ajustes que surgieron de la validación:
 
@@ -526,7 +528,7 @@ los casos de `04_tests.sql`, pero la validación de punta a punta queda para cua
   (`pago.estado = REEMBOLSADO`, `compra` `CONFIRMADA → CANCELADA`), pero falta definir el proceso.
 - **Numeración fiscal de facturas** (punto de venta, correlatividad y CAE de AFIP): hoy `numero` es
   un texto único que asigna el backend.
-- **Tiempo de reserva** fijo en 15 minutos (`trg_compra_bi`). Si el negocio quiere configurarlo, se
+- **Tiempo de reserva** fijo en 10 minutos (`trg_compra_bi`). Si el negocio quiere configurarlo, se
   puede pasar a una tabla de parámetros.
 - **Asientos numerados**: no los pide el enunciado; la capacidad se controla por cantidad.
 - **Hashes del seed**: son de ejemplo (formato válido, no corresponden a ninguna contraseña

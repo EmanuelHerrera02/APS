@@ -618,6 +618,52 @@ BEGIN NOT ATOMIC
       AND (SELECT COUNT(*) FROM compra) = v_compras_antes);
 END//
 
+-- T36. Resultado esperado: el TTL de reserva temporal es de 10 minutos (600 s) y
+-- v_disponibilidad descuenta tanto ventas confirmadas como reservas vigentes.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE v_ttl_seg INT;
+  DECLARE v_disp_inicial INT;
+  DECLARE v_disp_tras_reserva INT;
+  DECLARE v_disp_tras_confirmar INT;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  SET @s_t36 = (SELECT id FROM salida WHERE vuelo_id = @v AND fecha = CURDATE() + INTERVAL 9 DAY);
+  SET v_disp_inicial = (SELECT asientos_disponibles FROM v_disponibilidad WHERE salida_id = @s_t36 AND clase = 'ECONOMY');
+  CALL crear_compra(@s_t36, @juan, NULL, 'WEB', 'juan.perez@gmail.com', @dos_eco, @c_t36a);
+  SET v_ttl_seg = (SELECT TIMESTAMPDIFF(SECOND, created_at, expira_en) FROM compra WHERE id = @c_t36a);
+  SET v_disp_tras_reserva = (SELECT asientos_disponibles FROM v_disponibilidad WHERE salida_id = @s_t36 AND clase = 'ECONOMY');
+  CALL confirmar_compra(@c_t36a);
+  CALL crear_compra(@s_t36, @maria, NULL, 'WEB', 'maria.gonzalez@hotmail.com', @uno_eco, @c_t36b);
+  SET v_disp_tras_confirmar = (SELECT asientos_disponibles FROM v_disponibilidad WHERE salida_id = @s_t36 AND clase = 'ECONOMY');
+  INSERT INTO resultado_test VALUES ('T36', 'TTL 10m y descuento en búsqueda',
+    'TTL de 10 minutos y v_disponibilidad descuenta confirmadas y reservas vigentes',
+    'TTL 600s; disponibles 20 -> 18 (reserva) -> 17 (2 confirmados + 1 reservado)',
+    COALESCE(v_err, CONCAT('TTL ', v_ttl_seg, 's; disponibles ', v_disp_inicial, ' -> ', v_disp_tras_reserva, ' -> ', v_disp_tras_confirmar)),
+    v_err IS NULL AND v_ttl_seg BETWEEN 599 AND 601
+      AND v_disp_inicial = 20 AND v_disp_tras_reserva = 18 AND v_disp_tras_confirmar = 17
+      AND (SELECT estado FROM compra WHERE id = @c_t36a) = 'CONFIRMADA');
+END//
+
+-- T37. Resultado esperado: confirmar_compra rechaza una reserva con TTL vencido y
+-- registrar_pago sobre reserva vencida la expira, libera asientos y pide reembolso.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE v_disp_final INT;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  UPDATE compra SET expira_en = NOW() - INTERVAL 1 SECOND WHERE id = @c_t36b;
+  CALL confirmar_compra(@c_t36b);
+  CALL registrar_pago(@c_t36b, 100000.00, 'TARJETA_CREDITO', 'APROBADO', 'TEST-EXP-37', 'VISA', '4242', @p_t37, @r_t37);
+  SET v_disp_final = (SELECT asientos_disponibles FROM v_disponibilidad WHERE salida_id = @s_t36 AND clase = 'ECONOMY');
+  INSERT INTO resultado_test VALUES ('T37', 'Reserva vencida no se confirma',
+    'confirmar_compra falla si expira_en <= NOW() y registrar_pago libera el asiento con REQUIERE_REEMBOLSO',
+    'ERROR La reserva de la compra está vencida; resultado REQUIERE_REEMBOLSO; compra EXPIRADA; disponibles = 18',
+    CONCAT(COALESCE(v_err, 'sin error'), '; resultado=', COALESCE(@r_t37, 'NULL'), '; disponibles=', COALESCE(v_disp_final, -1)),
+    v_err LIKE 'La reserva de la compra está vencida%'
+      AND @r_t37 = 'REQUIERE_REEMBOLSO'
+      AND (SELECT estado FROM compra WHERE id = @c_t36b) = 'EXPIRADA'
+      AND v_disp_final = 18);
+END//
+
 DELIMITER ;
 
 -- =============================================================================
@@ -628,7 +674,7 @@ SELECT caso, requisito, prueba, esperado, obtenido,
   FROM resultado_test ORDER BY caso;
 
 SELECT COUNT(*) AS casos, SUM(ok) AS pasan, SUM(NOT ok) AS fallan,
-       IF(SUM(NOT ok) = 0 AND COUNT(*) = 35, 'TODOS LOS CASOS PASAN', 'HAY CASOS QUE FALLAN') AS resumen
+       IF(SUM(NOT ok) = 0 AND COUNT(*) = 37, 'TODOS LOS CASOS PASAN', 'HAY CASOS QUE FALLAN') AS resumen
   FROM resultado_test;
 
 SET @casos_ok = (SELECT COUNT(*) FROM resultado_test WHERE ok);
@@ -638,7 +684,7 @@ ROLLBACK;
 -- Termina con error si algún caso falló o no se ejecutó (útil en CI).
 DELIMITER //
 BEGIN NOT ATOMIC
-  IF @casos_ok <> 35 THEN
+  IF @casos_ok <> 37 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '04_tests.sql: hay casos que fallan';
   END IF;
 END//

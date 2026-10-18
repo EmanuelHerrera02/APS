@@ -264,7 +264,7 @@ BEGIN
   END IF;
 
   IF NEW.expira_en IS NULL THEN
-    SET NEW.expira_en = NOW() + INTERVAL 15 MINUTE;
+    SET NEW.expira_en = NOW() + INTERVAL 10 MINUTE;
   END IF;
   SET NEW.confirmada_en = NULL;
 END//
@@ -272,6 +272,8 @@ END//
 CREATE TRIGGER trg_compra_bu BEFORE UPDATE ON compra FOR EACH ROW
 BEGIN
   DECLARE v_msg VARCHAR(255);
+  DECLARE v_reservados INT DEFAULT 0;
+  DECLARE v_desborde INT DEFAULT 0;
   IF NEW.salida_id <> OLD.salida_id OR NEW.codigo <> OLD.codigo THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'salida_id y codigo de una compra son inmutables';
   END IF;
@@ -283,6 +285,26 @@ BEGIN
       SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = v_msg;
     END IF;
     IF NEW.estado = 'CONFIRMADA' THEN
+      IF OLD.expira_en IS NOT NULL AND OLD.expira_en <= NOW() THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La reserva de la compra está vencida';
+      END IF;
+      SELECT COUNT(*) INTO v_reservados
+        FROM pasaje WHERE compra_id = NEW.id AND estado = 'RESERVADO';
+      IF v_reservados = 0 THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'No se puede confirmar una compra sin pasajes reservados';
+      END IF;
+      SELECT COUNT(*) INTO v_desborde
+        FROM salida_clase sc
+       WHERE sc.salida_id = NEW.salida_id
+         AND (sc.vendidos > sc.capacidad
+              OR (SELECT COUNT(*) FROM pasaje p
+                   WHERE p.salida_id = sc.salida_id
+                     AND p.clase = sc.clase
+                     AND p.estado IN ('RESERVADO', 'EMITIDO')) > sc.vendidos);
+      IF v_desborde > 0 THEN
+        SIGNAL SQLSTATE '45000'
+          SET MESSAGE_TEXT = 'Inconsistencia de inventario: los pasajes activos superan la capacidad disponible';
+      END IF;
       SET NEW.confirmada_en = COALESCE(NEW.confirmada_en, NOW());
     END IF;
   END IF;
@@ -652,6 +674,50 @@ BEGIN
   IF v_tx_propia THEN COMMIT; END IF;
 END//
 
+-- Confirma atómicamente una compra pendiente contra el inventario de
+-- disponibilidad de su salida y clases bajo bloqueo exclusivo.
+CREATE PROCEDURE confirmar_compra(IN p_compra_id BIGINT UNSIGNED)
+MODIFIES SQL DATA
+BEGIN
+  DECLARE v_tx_propia BOOLEAN DEFAULT (@@in_transaction = 0);
+  DECLARE v_estado VARCHAR(20) DEFAULT NULL;
+  DECLARE v_salida_id BIGINT UNSIGNED DEFAULT NULL;
+  DECLARE v_expira_en DATETIME DEFAULT NULL;
+  DECLARE v_clases INT DEFAULT 0;
+
+  DECLARE EXIT HANDLER FOR SQLEXCEPTION
+  BEGIN
+    IF v_tx_propia THEN ROLLBACK; ELSE ROLLBACK TO SAVEPOINT sp_confirmar_compra; END IF;
+    RESIGNAL;
+  END;
+
+  IF v_tx_propia THEN START TRANSACTION; ELSE SAVEPOINT sp_confirmar_compra; END IF;
+
+  SELECT estado, salida_id, expira_en
+    INTO v_estado, v_salida_id, v_expira_en
+    FROM compra WHERE id = p_compra_id FOR UPDATE;
+  IF v_estado IS NULL THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La compra no existe';
+  END IF;
+  IF v_estado <> 'PENDIENTE_PAGO' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Solo se pueden confirmar compras en estado PENDIENTE_PAGO';
+  END IF;
+  IF v_expira_en IS NOT NULL AND v_expira_en <= NOW() THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La reserva de la compra está vencida';
+  END IF;
+
+  -- Bloquea el inventario de las clases involucradas en la salida.
+  SELECT COUNT(*) INTO v_clases
+    FROM salida_clase
+   WHERE salida_id = v_salida_id
+     AND clase IN (SELECT clase FROM pasaje WHERE compra_id = p_compra_id AND estado = 'RESERVADO')
+   FOR UPDATE;
+
+  UPDATE compra SET estado = 'CONFIRMADA' WHERE id = p_compra_id;
+
+  IF v_tx_propia THEN COMMIT; END IF;
+END//
+
 -- Crea los metadatos de factura interna de una compra confirmada. La clave única
 -- por compra y el NOT EXISTS hacen que repetir la llamada no duplique la factura.
 -- La numeración INT-* es interna: la numeración fiscal debe configurarse según
@@ -696,6 +762,7 @@ BEGIN
   DECLARE v_tx_propia BOOLEAN DEFAULT (@@in_transaction = 0);
   DECLARE v_estado VARCHAR(20) DEFAULT NULL;
   DECLARE v_total DECIMAL(12,2);
+  DECLARE v_expira_en DATETIME DEFAULT NULL;
 
   DECLARE EXIT HANDLER FOR SQLEXCEPTION
   BEGIN
@@ -707,9 +774,14 @@ BEGIN
   IF v_tx_propia THEN START TRANSACTION; ELSE SAVEPOINT sp_registrar_pago; END IF;
 
   -- Bloquea la compra: evita carreras con liberar_reservas_vencidas().
-  SELECT estado, total INTO v_estado, v_total FROM compra WHERE id = p_compra_id FOR UPDATE;
+  SELECT estado, total, expira_en INTO v_estado, v_total, v_expira_en
+    FROM compra WHERE id = p_compra_id FOR UPDATE;
   IF v_estado IS NULL THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La compra no existe';
+  END IF;
+  IF v_estado = 'PENDIENTE_PAGO' AND v_expira_en IS NOT NULL AND v_expira_en <= NOW() THEN
+    UPDATE compra SET estado = 'EXPIRADA' WHERE id = p_compra_id;
+    SET v_estado = 'EXPIRADA';
   END IF;
   IF p_estado = 'APROBADO' AND v_estado = 'PENDIENTE_PAGO' AND p_monto <> v_total THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El monto aprobado no coincide con el total de la compra';
@@ -720,7 +792,7 @@ BEGIN
   SET p_pago_id = LAST_INSERT_ID();
 
   IF p_estado = 'APROBADO' AND v_estado = 'PENDIENTE_PAGO' THEN
-    UPDATE compra SET estado = 'CONFIRMADA' WHERE id = p_compra_id;
+    CALL confirmar_compra(p_compra_id);
     CALL emitir_factura_compra(p_compra_id);
 
     INSERT INTO notificacion (tipo, canal, destinatario, usuario_id, compra_id, salida_id)
@@ -758,10 +830,10 @@ BEGIN
 
   SELECT COUNT(*) INTO v_asientos
     FROM pasaje p JOIN compra c ON c.id = p.compra_id
-   WHERE c.estado = 'PENDIENTE_PAGO' AND c.expira_en < v_corte AND p.estado = 'RESERVADO';
+   WHERE c.estado = 'PENDIENTE_PAGO' AND c.expira_en <= v_corte AND p.estado = 'RESERVADO';
 
   UPDATE compra SET estado = 'EXPIRADA'
-   WHERE estado = 'PENDIENTE_PAGO' AND expira_en < v_corte;
+   WHERE estado = 'PENDIENTE_PAGO' AND expira_en <= v_corte;
   SET v_compras = ROW_COUNT();
 
   SELECT v_compras AS compras_expiradas, v_asientos AS asientos_liberados;

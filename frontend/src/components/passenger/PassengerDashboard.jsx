@@ -23,6 +23,7 @@ export default function PassengerDashboard() {
   const [passengers, setPassengers] = useState([]);
   const [passengerErrors, setPassengerErrors] = useState({});
   const [passengersReady, setPassengersReady] = useState(false);
+  const [availabilityWarning, setAvailabilityWarning] = useState('');
   const [reservationState, setReservationState] = useState({ status: 'idle', reservation: null, message: '' });
   const [purchaseState, setPurchaseState] = useState({ status: 'loading', reservations: [], message: '' });
 
@@ -49,6 +50,7 @@ export default function PassengerDashboard() {
     setPassengers([]);
     setPassengerErrors({});
     setPassengersReady(false);
+    setAvailabilityWarning('');
     setReservationState({ status: 'idle', reservation: null, message: '' });
   };
 
@@ -59,6 +61,7 @@ export default function PassengerDashboard() {
     setPassengers([]);
     setPassengerErrors({});
     setPassengersReady(false);
+    setAvailabilityWarning('');
     setReservationState({ status: 'idle', reservation: null, message: '' });
   };
 
@@ -87,6 +90,7 @@ export default function PassengerDashboard() {
     setPassengers([]);
     setPassengerErrors({});
     setPassengersReady(false);
+    setAvailabilityWarning('');
     setReservationState({ status: 'idle', reservation: null, message: '' });
     const query = new URLSearchParams({
       origin: form.origin.trim(),
@@ -124,11 +128,19 @@ export default function PassengerDashboard() {
     setPassengers([emptyPassenger()]);
     setPassengerErrors({});
     setPassengersReady(false);
+    setAvailabilityWarning('');
     setReservationState({ status: 'idle', reservation: null, message: '' });
   };
 
   const updatePassengerCount = (value) => {
     const parsed = Number.parseInt(value, 10);
+    if (!Number.isNaN(parsed) && selectedFare && parsed > selectedFare.seatsAvailable) {
+      setAvailabilityWarning(
+        `No hay disponibilidad suficiente para ${parsed} pasajes: solo ${selectedFare.seatsAvailable === 1 ? 'queda 1 asiento disponible' : `quedan ${selectedFare.seatsAvailable} asientos disponibles`} en esta clase.`
+      );
+    } else {
+      setAvailabilityWarning('');
+    }
     const passengerCount = Number.isNaN(parsed) ? 1 : Math.max(1, Math.min(maxPassengers, parsed));
     setSelection((current) => current ? { ...current, passengerCount } : current);
     setPassengers((current) => Array.from({ length: passengerCount }, (_, index) => current[index] || emptyPassenger()));
@@ -167,6 +179,14 @@ export default function PassengerDashboard() {
   };
 
   const createReservation = async () => {
+    if (!selectedDeparture || !selectedFare || selection.passengerCount > selectedFare.seatsAvailable) {
+      setReservationState({
+        status: 'error',
+        reservation: null,
+        message: 'No hay disponibilidad suficiente para completar la reserva antes del pago.',
+      });
+      return;
+    }
     setReservationState({ status: 'loading', reservation: null, message: '' });
     try {
       const response = await request('/passenger/reservations', {
@@ -330,6 +350,7 @@ export default function PassengerDashboard() {
                     <span className="trip-search-step">SELECCIÓN DE PASAJES</span>
                     <h3 id="trip-selection-title">{selectedDeparture.flightCode} · {selectedFare.class === 'PRIMERA' ? 'Primera' : 'Económica'}</h3>
                     <p>{selectedDeparture.originCode} → {selectedDeparture.destinationCode} · {formatTripDate(selectedDeparture.date)} · {selectedFare.seatsAvailable} {selectedFare.seatsAvailable === 1 ? 'asiento disponible' : 'asientos disponibles'}</p>
+                    {availabilityWarning && <p className="trip-reservation-message is-error" role="alert">{availabilityWarning}</p>}
                   </div>
                   <label className="trip-passenger-count" htmlFor="trip-passenger-count">
                     Cantidad de pasajes
@@ -417,7 +438,7 @@ export default function PassengerDashboard() {
                   {reservationState.status === 'error' && <p className="trip-reservation-message is-error" role="alert">{reservationState.message}</p>}
                   {reservationState.status === 'success' && reservationState.reservation && (
                     <p className="trip-reservation-message is-success" role="status">
-                      Compra {reservationState.reservation.code} creada · {reservationState.reservation.status} · Vence {reservationState.reservation.expiresAt}.
+                      Compra {reservationState.reservation.code} creada · {reservationState.reservation.status} · Asientos reservados por 10 minutos (vence {reservationState.reservation.expiresAt}).
                     </p>
                   )}
                   <div className="trip-passenger-form-actions">

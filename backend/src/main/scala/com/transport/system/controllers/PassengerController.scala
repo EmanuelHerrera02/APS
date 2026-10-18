@@ -99,6 +99,52 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
     } yield (id, contact, people)
   }
 
+  private def releaseExpiredReservations(connection: java.sql.Connection): Unit = {
+    val call = connection.prepareCall("{call liberar_reservas_vencidas()}")
+    try {
+      var hasResult = call.execute()
+      while (hasResult || call.getUpdateCount != -1) {
+        if (hasResult) {
+          val rs = call.getResultSet
+          if (rs != null) rs.close()
+        }
+        hasResult = call.getMoreResults()
+      }
+    } finally call.close()
+  }
+
+  private def executeCreateReservation(connection: java.sql.Connection, userId: Int, departureId: Long,
+                                       email: String, passengerJsonPayload: String): Map[String, Any] = {
+    val call: CallableStatement = connection.prepareCall("{call crear_compra(?, ?, ?, ?, ?, ?, ?)}")
+    try {
+      call.setLong(1, departureId)
+      call.setLong(2, userId.toLong)
+      call.setNull(3, Types.BIGINT)
+      call.setString(4, "WEB")
+      call.setString(5, email)
+      call.setString(6, passengerJsonPayload)
+      call.registerOutParameter(7, Types.BIGINT)
+      call.execute()
+      val reservationId = call.getLong(7)
+      if (call.wasNull() || reservationId <= 0) throw new SQLException("La base no devolvió el identificador de compra")
+      val query = connection.prepareStatement("SELECT codigo, total, estado, expira_en FROM compra WHERE id = ?")
+      try {
+        query.setLong(1, reservationId)
+        val result = query.executeQuery()
+        try {
+          if (!result.next()) throw new SQLException("No se encontró la compra creada")
+          Map(
+            "reservationId" -> reservationId,
+            "code" -> result.getString("codigo"),
+            "status" -> result.getString("estado"),
+            "total" -> result.getBigDecimal("total"),
+            "expiresAt" -> result.getTimestamp("expira_en").toString
+          )
+        } finally result.close()
+      } finally query.close()
+    } finally call.close()
+  }
+
   private def callCreateReservation(userId: Int, departureId: Long, email: String,
                                     passengers: List[ReservationPassenger]): Map[String, Any] = {
     val jdbcUrl = sys.env.getOrElse("AERONET_JDBC_URL", "")
@@ -115,36 +161,18 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
         "clase" -> JString(passenger.fareClass)
       )
     })
+    val payload = compact(render(passengerJson))
     val connection = DriverManager.getConnection(jdbcUrl, dbUser, dbPassword)
     try {
-      val call: CallableStatement = connection.prepareCall("{call crear_compra(?, ?, ?, ?, ?, ?, ?)}")
       try {
-        call.setLong(1, departureId)
-        call.setLong(2, userId.toLong)
-        call.setNull(3, Types.BIGINT)
-        call.setString(4, "WEB")
-        call.setString(5, email)
-        call.setString(6, compact(render(passengerJson)))
-        call.registerOutParameter(7, Types.BIGINT)
-        call.execute()
-        val reservationId = call.getLong(7)
-        if (call.wasNull() || reservationId <= 0) throw new SQLException("La base no devolvió el identificador de compra")
-        val query = connection.prepareStatement("SELECT codigo, total, estado, expira_en FROM compra WHERE id = ?")
-        try {
-          query.setLong(1, reservationId)
-          val result = query.executeQuery()
-          try {
-            if (!result.next()) throw new SQLException("No se encontró la compra creada")
-            Map(
-              "reservationId" -> reservationId,
-              "code" -> result.getString("codigo"),
-              "status" -> result.getString("estado"),
-              "total" -> result.getBigDecimal("total"),
-              "expiresAt" -> result.getTimestamp("expira_en").toString
-            )
-          } finally result.close()
-        } finally query.close()
-      } finally call.close()
+        executeCreateReservation(connection, userId, departureId, email, payload)
+      } catch {
+        case ex: SQLException
+            if Option(ex.getSQLState).contains("45000") &&
+              Option(ex.getMessage).exists(_.toLowerCase(java.util.Locale.ROOT).contains("disponibilidad")) =>
+          releaseExpiredReservations(connection)
+          executeCreateReservation(connection, userId, departureId, email, payload)
+      }
     } finally connection.close()
   }
 
@@ -201,6 +229,7 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
             try {
               val connection = DriverManager.getConnection(jdbcUrl, dbUser, dbPassword)
               try {
+                releaseExpiredReservations(connection)
                 val statement = connection.prepareStatement(sql)
                 try {
                   statement.setString(1, origin)
@@ -290,7 +319,8 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
             Created(Map("message" -> "Compra registrada pendiente de pago", "reservation" -> reservation))
           } catch {
             case ex: SQLException if Option(ex.getSQLState).contains("45000") =>
-              val message = Option(ex.getMessage).getOrElse("No se pudo completar la compra")
+              val rawMessage = Option(ex.getMessage).getOrElse("No se pudo completar la compra")
+              val message = rawMessage.replaceFirst("^\\(conn=\\d+\\)\\s*", "")
               val status = if (message.toLowerCase(java.util.Locale.ROOT).contains("disponibilidad") ||
                 message.toLowerCase(java.util.Locale.ROOT).contains("no está disponible")) 409 else 422
               halt(status, Map("error" -> message))

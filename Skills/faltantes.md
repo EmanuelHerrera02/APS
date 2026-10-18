@@ -1,12 +1,10 @@
 # Tareas pendientes y parciales
 
-**Revisión:** 2026-10-16 · Sprint 2. Contraste de `Skills/tareas.md`, criterios en `plan_de_desarrollo_sprint_2.md`, código y pruebas existentes.
+**Revisión:** 2026-10-18 · Sprint 2. Contraste de `Skills/tareas.md`, criterios en `plan_de_desarrollo_sprint_2.md`, código y pruebas existentes.
 
 ## US11 — Control de disponibilidad y sobreventa
 
-- **Parcial — Evitar sobreventa en compras simultáneas.** `db/02_logic.sql` reserva con actualización condicional en `reservar_asientos`, confirma la compra bajo bloqueo y `db/01_schema.sql` limita `vendidos <= capacidad`. `db/04_tests.sql` valida capacidad y atomicidad en casos secuenciales; no hay prueba concurrente sobre los últimos asientos.
-- **Pendiente — TTL de 10 minutos.** `db/02_logic.sql` asigna 15 minutos (`trg_compra_bi`); ajustar a 10 y verificar liberación automática.
-- **Parcial — Aviso de disponibilidad insuficiente antes del pago.** `v_disponibilidad` devuelve plazas vigentes y la UI limita la cantidad seleccionable y muestra errores de reserva, incluido el conflicto de disponibilidad. Falta ejecutar el flujo HTTP cuando la disponibilidad cambia entre búsqueda y reserva.
+- **Completado — Control de disponibilidad, TTL de 10 minutos, confirmación atómica y pruebas de concurrencia.** `db/02_logic.sql` y la migración `db/migrations/20261018_us11_disponibilidad_ttl.sql` fijan el TTL de reserva temporal en 10 minutos (`trg_compra_bi`), liberan reservas vencidas por evento cada minuto y antes de buscar/reservar en `PassengerController.scala`, confirman atómicamente contra inventario con `confirmar_compra` y `trg_compra_bu`, muestran alertas previas al pago en `PassengerDashboard.jsx` y cuentan con casos `T36`–`T37` en `db/04_tests.sql` más la suite `tests/http/us11-disponibilidad-concurrencia.mjs` (ver `docs/pruebas-disponibilidad-sobreventa.md`).
 
 ## US9 — Pago en línea
 
