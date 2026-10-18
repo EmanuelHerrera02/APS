@@ -113,6 +113,19 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
     } finally call.close()
   }
 
+  /**
+   * Dos altas simultáneas pueden chocar en un deadlock de InnoDB (bloqueos de hueco sobre
+   * uq_compra_codigo al generar el código en trg_compra_bi). crear_compra es atómica y la base
+   * ya deshizo la transacción, así que se reintenta como recomienda MariaDB.
+   */
+  private def retryOnDeadlock[T](attempts: Int = 4)(work: => T): T =
+    try work
+    catch {
+      case ex: SQLException if attempts > 1 && Option(ex.getSQLState).contains("40001") =>
+        Thread.sleep(10L + scala.util.Random.nextInt(40))
+        retryOnDeadlock(attempts - 1)(work)
+    }
+
   private def executeCreateReservation(connection: java.sql.Connection, userId: Int, departureId: Long,
                                        email: String, passengerJsonPayload: String): Map[String, Any] = {
     val call: CallableStatement = connection.prepareCall("{call crear_compra(?, ?, ?, ?, ?, ?, ?)}")
@@ -165,13 +178,13 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
     val connection = DriverManager.getConnection(jdbcUrl, dbUser, dbPassword)
     try {
       try {
-        executeCreateReservation(connection, userId, departureId, email, payload)
+        retryOnDeadlock()(executeCreateReservation(connection, userId, departureId, email, payload))
       } catch {
         case ex: SQLException
             if Option(ex.getSQLState).contains("45000") &&
               Option(ex.getMessage).exists(_.toLowerCase(java.util.Locale.ROOT).contains("disponibilidad")) =>
-          releaseExpiredReservations(connection)
-          executeCreateReservation(connection, userId, departureId, email, payload)
+          retryOnDeadlock()(releaseExpiredReservations(connection))
+          retryOnDeadlock()(executeCreateReservation(connection, userId, departureId, email, payload))
       }
     } finally connection.close()
   }

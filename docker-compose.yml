@@ -44,5 +44,21 @@ services:
       timeout: 5s
       retries: 30
 
+  # Servidor SMTP de desarrollo (US10): recibe los correos del worker sin entregarlos
+  # a buzones reales. Opcional: `docker compose --profile correo up -d mail`.
+  # Bandeja web en http://localhost:8025 · SMTP en localhost:1025 (sin TLS).
+  mail:
+    image: axllent/mailpit:v1.27
+    container_name: aeronet-mail
+    profiles: ["correo"]
+    restart: unless-stopped
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+      MP_MAX_MESSAGES: "5000"
+    ports:
+      - "${AERONET_MAIL_SMTP_PORT:-1025}:1025"
+      - "${AERONET_MAIL_UI_PORT:-8025}:8025"
+
 volumes:
   aeronet-data:

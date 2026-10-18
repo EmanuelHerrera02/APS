@@ -1,7 +1,8 @@
 package com.transport.system
 
-import com.transport.system.controllers.{AdminController, AuthController, EmailDeliveryController, EmployeeController, PassengerController}
+import com.transport.system.controllers.{AdminController, AuthController, EmailDeliveryController, EmployeeController, PassengerController, PaymentController, PaymentWebhookController}
 import com.transport.system.documents.DocumentGenerationLifecycle
+import com.transport.system.payments.PaymentLifecycle
 import jakarta.servlet.{DispatcherType, Filter, FilterChain, ServletRequest, ServletResponse}
 import jakarta.servlet.http.{HttpServletRequest, HttpServletResponse}
 import org.eclipse.jetty.ee10.servlet.{FilterHolder, ServletContextHandler, ServletHolder}
@@ -17,10 +18,13 @@ object BackendMain {
     val context = new ServletContextHandler()
     context.setContextPath("/")
     context.addEventListener(new DocumentGenerationLifecycle)
+    context.addEventListener(new PaymentLifecycle)
     context.addFilter(new FilterHolder(new LocalCorsFilter), "/*", EnumSet.of(DispatcherType.REQUEST))
     context.addServlet(new ServletHolder(new AuthController), "/auth/*")
     context.addServlet(new ServletHolder(new PassengerController), "/passenger/*")
+    context.addServlet(new ServletHolder(new PaymentController), "/payments/*")
     context.addServlet(new ServletHolder(new EmailDeliveryController), "/webhooks/email/*")
+    context.addServlet(new ServletHolder(new PaymentWebhookController), "/webhooks/payments/*")
     context.addServlet(new ServletHolder(new EmployeeController), "/employee/*")
     context.addServlet(new ServletHolder(new AdminController), "/admin/*")
     server.setHandler(context)

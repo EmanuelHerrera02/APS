@@ -2,6 +2,7 @@ import React from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import MainLayout from '../layouts/MainLayout';
+import PaymentPanel from './PaymentPanel';
 import './PassengerDashboard.css';
 
 const localToday = new Date();
@@ -26,6 +27,7 @@ export default function PassengerDashboard() {
   const [availabilityWarning, setAvailabilityWarning] = useState('');
   const [reservationState, setReservationState] = useState({ status: 'idle', reservation: null, message: '' });
   const [purchaseState, setPurchaseState] = useState({ status: 'loading', reservations: [], message: '' });
+  const [paymentPurchaseId, setPaymentPurchaseId] = useState(null);
 
   const loadReservations = useCallback(async () => {
     setPurchaseState((current) => ({ ...current, status: 'loading', message: '' }));
@@ -438,7 +440,7 @@ export default function PassengerDashboard() {
                   {reservationState.status === 'error' && <p className="trip-reservation-message is-error" role="alert">{reservationState.message}</p>}
                   {reservationState.status === 'success' && reservationState.reservation && (
                     <p className="trip-reservation-message is-success" role="status">
-                      Compra {reservationState.reservation.code} creada · {reservationState.reservation.status} · Asientos reservados por 10 minutos (vence {reservationState.reservation.expiresAt}).
+                      Compra {reservationState.reservation.code} creada · {reservationState.reservation.status} · Asientos reservados por 10 minutos (vence {reservationState.reservation.expiresAt}). Completá el pago para confirmar los pasajes.
                     </p>
                   )}
                   <div className="trip-passenger-form-actions">
@@ -454,6 +456,9 @@ export default function PassengerDashboard() {
                       {reservationState.status === 'loading' ? 'Reservando…' : reservationState.status === 'success' ? 'Compra creada' : 'Confirmar y reservar asientos'}
                     </button>
                   </div>
+                  {reservationState.status === 'success' && reservationState.reservation && (
+                    <PaymentPanel purchaseId={reservationState.reservation.reservationId} onFinished={loadReservations} />
+                  )}
                 </section>
               )}
             </div>
@@ -498,7 +503,17 @@ export default function PassengerDashboard() {
                   ))}
                   {!purchase.invoiceAvailable && !purchase.tickets.some((ticket) => ticket.available) && <span>Documentos en preparación.</span>}
                 </div>
+              ) : purchase.status === 'PENDIENTE_PAGO' && purchase.secondsToExpire > 0 ? (
+                <div className="trip-document-actions">
+                  <span>Reserva vigente: pagá para confirmar los pasajes.</span>
+                  {paymentPurchaseId !== purchase.id
+                    && purchase.id !== reservationState.reservation?.reservationId
+                    && <button type="button" onClick={() => setPaymentPurchaseId(purchase.id)}>Pagar {formatPrice(purchase.total)}</button>}
+                </div>
               ) : <span>Los documentos estarán disponibles cuando se confirme el pago.</span>}
+              {paymentPurchaseId === purchase.id && (
+                <PaymentPanel purchaseId={purchase.id} onFinished={loadReservations} onClose={() => setPaymentPurchaseId(null)} />
+              )}
             </article>
           ))}
         </section>

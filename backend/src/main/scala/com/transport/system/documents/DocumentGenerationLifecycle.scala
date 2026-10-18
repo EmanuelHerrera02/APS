@@ -45,6 +45,7 @@ class DocumentGenerationLifecycle extends ServletContextListener {
           catch { case ex: Exception => logger.error("No se pudieron registrar métricas de la cola de emails", ex) }
         }, 60, 60, TimeUnit.SECONDS)
         logger.info("Worker de emails iniciado")
+        EmailQueueWorker.configurationWarnings.foreach(warning => logger.warn(s"Configuración de correo: $warning"))
       } else logger.info("Worker de emails desactivado: falta configurar el proveedor AERONET_EMAIL_PROVIDER, sus credenciales o AERONET_SMTP_FROM")
     }
   }

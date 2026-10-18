@@ -35,6 +35,18 @@ Del mismo modo, si la base es anterior a la máquina de estados de pagos, aplica
 docker compose exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" aeronet < /aeronet/db/06_migration_pago_estados.sql'
 ```
 
+Para el pago en línea (US9), aplicar una vez la migración si la base es anterior a esa historia:
+
+```powershell
+docker compose exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" aeronet < /aeronet/db/migrations/20261018_us9_pago_en_linea.sql'
+```
+
+y definir `AERONET_PAYMENT_PROVIDER=mercadopago` con las credenciales de prueba antes de `sbt run`
+(ver [us9/pasarela-de-pago.md](us9/pasarela-de-pago.md)). Sin cuenta de Mercado Pago se puede usar el
+sandbox local: [pruebas-pago-en-linea.md](pruebas-pago-en-linea.md). Para ver los correos sin
+entregarlos, levantar Mailpit con `docker compose --profile correo up -d mail`
+(ver [us10/configuracion-correo.md](us10/configuracion-correo.md)).
+
 En otra terminal iniciar la interfaz:
 
 ```powershell

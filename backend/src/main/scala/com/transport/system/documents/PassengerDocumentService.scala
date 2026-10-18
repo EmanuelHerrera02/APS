@@ -28,8 +28,9 @@ object PassengerDocumentService {
     val connection = db()
     try {
       val query = connection.prepareStatement(
-        """SELECT c.id, c.codigo, c.estado, c.created_at, s.fecha, v.codigo AS vuelo,
-          |       ao.ciudad AS origen, ad.ciudad AS destino
+        """SELECT c.id, c.codigo, c.estado, c.created_at, c.total, s.fecha, v.codigo AS vuelo,
+          |       ao.ciudad AS origen, ad.ciudad AS destino,
+          |       GREATEST(TIMESTAMPDIFF(SECOND, NOW(), c.expira_en), 0) AS segundos_restantes
           |FROM compra c JOIN salida s ON s.id=c.salida_id JOIN vuelo v ON v.id=s.vuelo_id
           |JOIN aeropuerto ao ON ao.id=v.aeropuerto_origen_id
           |JOIN aeropuerto ad ON ad.id=v.aeropuerto_destino_id
@@ -62,6 +63,8 @@ object PassengerDocumentService {
           "createdAt" -> rs.getTimestamp("created_at").toLocalDateTime.toString,
           "date" -> rs.getDate("fecha").toString, "flight" -> rs.getString("vuelo"),
           "origin" -> rs.getString("origen"), "destination" -> rs.getString("destino"),
+          "total" -> rs.getBigDecimal("total"),
+          "secondsToExpire" -> (if (rs.getString("estado") == "PENDIENTE_PAGO") rs.getLong("segundos_restantes") else 0L),
           "invoiceAvailable" -> (confirmed && invoicePath.nonEmpty), "tickets" -> tickets.toList)
       } finally { rs.close(); query.close() }
       purchases.toList

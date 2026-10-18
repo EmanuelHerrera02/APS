@@ -9,7 +9,7 @@ SQL puro, sin ORM.
 | [db/02_logic.sql](../db/02_logic.sql) | Triggers, procedimientos almacenados y evento programado |
 | [db/03_seed.sql](../db/03_seed.sql) | Datos de prueba (10 aeropuertos, 4 vuelos, 6 usuarios, 7 compras) |
 | [db/04_tests.sql](../db/04_tests.sql) | 37 casos que verifican restricciones y lógica |
-| [db/05_migration_flight_create_permission.sql](../db/05_migration_flight_create_permission.sql), [db/06_migration_pago_estados.sql](../db/06_migration_pago_estados.sql), [db/migrations/20261018_us11_disponibilidad_ttl.sql](../db/migrations/20261018_us11_disponibilidad_ttl.sql) | Migraciones idempotentes para bases creadas antes de esos cambios |
+| [db/05_migration_flight_create_permission.sql](../db/05_migration_flight_create_permission.sql), [db/06_migration_pago_estados.sql](../db/06_migration_pago_estados.sql), [db/migrations/20261018_us11_disponibilidad_ttl.sql](../db/migrations/20261018_us11_disponibilidad_ttl.sql), [db/migrations/20261018_us9_pago_en_linea.sql](../db/migrations/20261018_us9_pago_en_linea.sql) | Migraciones idempotentes para bases creadas antes de esos cambios |
 | [docker-compose.yml](../docker-compose.yml) | MariaDB que carga 01 → 02 → 03 al crear el volumen |
 
 ```bash
@@ -44,6 +44,8 @@ erDiagram
     compra ||--|{ pasaje : "incluye 1..9"
     salida_clase ||--o{ pasaje : "ocupa asiento de"
     compra ||--o{ pago : "se paga con"
+    compra ||--o{ transaccion_pago : "se cobra en línea con"
+    transaccion_pago |o--o| pago : "registra"
     compra ||--o| factura : "se factura en"
     usuario ||--o{ dispositivo_usuario : "registra"
     compra |o--o{ notificacion : "refiere a"
@@ -157,6 +159,16 @@ erDiagram
         char ultimos_4 "nunca PAN, CVV ni vencimiento"
         datetime fecha_pago
     }
+    transaccion_pago {
+        bigint id PK
+        char uuid UK "clave de idempotencia"
+        bigint compra_id FK
+        decimal monto
+        enum estado "CREADA PROCESANDO PENDIENTE APROBADA RECHAZADA ERROR REEMBOLSADA"
+        varchar id_pago_pasarela UK
+        bigint pago_id FK, UK
+        bigint compra_bloqueada UK "una activa por compra"
+    }
     factura {
         bigint id PK
         bigint compra_id FK, UK
@@ -255,6 +267,17 @@ capacidad y el precio tienen que ser mayores que 0. Un vuelo sin Primera simplem
   efectivo y transferencia.
 - `id_transaccion_pasarela` es único, lo que también da idempotencia ante *webhooks* repetidos.
 
+**`transaccion_pago`** (US9): cada intento de cobro en línea contra la pasarela (Mercado Pago).
+- `uuid` (v4, generado por el backend) es la clave de idempotencia que viaja como
+  `X-Idempotency-Key` y como `external_reference`: reintentar con el mismo uuid no cobra dos veces.
+- `compra_bloqueada` es una columna generada (`compra_id` mientras la transacción está
+  `CREADA`, `PROCESANDO`, `PENDIENTE` o `APROBADA`) con índice único: una compra no puede tener
+  dos transacciones activas o aprobadas. Una en `ERROR` o `RECHAZADA` libera el bloqueo.
+- Guarda `monto`, `estado`, `id_pago_pasarela`, `estado_pasarela`, `detalle_estado` y el
+  `resultado_compra` de `registrar_pago()`; al resolverse queda enlazada con su fila de `pago`.
+- No tiene columnas para datos de tarjeta: la tarjeta se tokeniza en el navegador con el SDK de la
+  pasarela. Cada cambio de estado se registra en `auditoria` (`accion = 'PAGO_TRANSACCION'`).
+
 **`factura`**: comprobante de una compra confirmada. Una por compra.
 - El número es único; el tipo es `A`, `B` o `C`; guarda fecha, total, receptor y `ruta_pdf`.
 - La factura A exige CUIT del receptor.
@@ -290,6 +313,10 @@ capacidad y el precio tienen que ser mayores que 0. Un vuelo sin Primera simplem
 | `registrar_pago(compra, monto, medio, estado, id_tx, marca, ultimos_4, OUT pago_id, OUT resultado)` | Registra el pago y aplica su efecto. Si la reserva estaba vencida (`expira_en <= NOW()`), la expira primero. `APROBADO` confirma la compra con `confirmar_compra()` (emite pasajes y encola la `CONFIRMACION`). `RECHAZADO` la cancela (libera asientos). Un pago aprobado sobre una compra ya vencida se registra igual y devuelve `REQUIERE_REEMBOLSO`. |
 | `liberar_reservas_vencidas()` | Pasa a `EXPIRADA` las compras `PENDIENTE_PAGO` con `expira_en <= NOW()`. Los triggers cancelan sus pasajes y devuelven los asientos. Devuelve cuántas compras y asientos liberó. |
 | `reenviar_documentacion(compra, solicitante, email)` | Encola un `REENVIO` de pasajes y factura (por ejemplo, pedido en mostrador). |
+| `iniciar_transaccion_pago(compra, usuario, uuid, OUT uuid_transaccion)` | US9. Bajo el bloqueo de la compra, devuelve la transacción activa o aprobada si existe; si no, exige que la compra sea del usuario, esté `PENDIENTE_PAGO` y no venza en los próximos 30 s, y crea la transacción `CREADA` con el total. |
+| `tomar_transaccion_pago(uuid, usuario, OUT accion)` | US9. Pasa la transacción a `PROCESANDO` y devuelve `PROCESAR` si hay que llamar a la pasarela; si ya avanzó, devuelve su estado (reintento del cliente sin nuevo cobro). |
+| `resolver_transaccion_pago(uuid, estado, id_pasarela, estado_pasarela, detalle, monto, medio, marca, ultimos_4, OUT resultado)` | US9. Aplica el resultado de la pasarela de forma idempotente: `PENDIENTE` conserva la reserva; `APROBADA`/`RECHAZADA` verifican el importe y llaman a `registrar_pago()` (confirma o cancela la compra). Si ya estaba resuelta devuelve el resultado guardado. |
+| `registrar_reembolso_transaccion(uuid)` | US9. Marca `REEMBOLSADA` la transacción y `REEMBOLSADO` el pago cuando la aprobación llegó con la reserva vencida (`REQUIERE_REEMBOLSO`). Idempotente. |
 
 Los procedimientos de varios pasos abren su propia transacción si se los llama en modo
 *autocommit*, o usan un `SAVEPOINT` si el backend ya abrió una. Ante cualquier error deshacen lo
@@ -336,7 +363,9 @@ exactamente 12 aceptadas y 13 rechazadas.
 | `pasaje` | `au` | Al cancelar, devuelve el asiento (`vendidos - 1`). |
 | `pago` | `bi` / `bu` | No se inserta como `REEMBOLSADO`. Transiciones: `PENDIENTE → APROBADO / RECHAZADO` y `APROBADO → REEMBOLSADO`. Compra, monto y medio son inmutables; los datos de pasarela solo cambian mientras está `PENDIENTE`. |
 | `factura` | `bi` / `bu` | Solo se factura una compra confirmada, con su total. Una vez emitida, solo se puede completar `ruta_pdf`. |
-| aeropuerto, usuario, vuelo, vuelo_clase, salida, salida_clase, compra, pasaje, pago, factura | `bd` | Borrado físico bloqueado (borrado lógico). |
+| `transaccion_pago` | `bi` / `bu` | Nace `CREADA`. Transiciones: `CREADA → PROCESANDO / ERROR`, `PROCESANDO → PENDIENTE / APROBADA / RECHAZADA / ERROR`, `PENDIENTE → APROBADA / RECHAZADA`, `ERROR → PENDIENTE / APROBADA / RECHAZADA` y `APROBADA → REEMBOLSADA`. uuid, compra, monto y moneda son inmutables, igual que el pago de pasarela una vez asociado. |
+| `transaccion_pago` | `ai` / `au` | Registra la creación y cada cambio de estado en `auditoria`. |
+| aeropuerto, usuario, vuelo, vuelo_clase, salida, salida_clase, compra, pasaje, pago, factura, transaccion_pago | `bd` | Borrado físico bloqueado (borrado lógico). |
 
 ---
 
@@ -473,7 +502,7 @@ enunciado figura **sin número**; se asigna cuando el equipo lo confirme, sin ca
 | — | Admin modifica vuelo | `vuelo`, `vuelo_clase`, `salida`, `salida_clase` | propagación de horario y capacidad a salidas futuras; `generar_salidas()` idempotente |
 | — | Admin cancela vuelo o salida | `vuelo`, `salida`, `compra`, `notificacion` | cascada de cancelación, compras impagas canceladas, outbox |
 | — | Compra de 1 a 9 pasajes eligiendo clase | `compra`, `pasaje`, `salida_clase` | `crear_compra()`, `reservar_asientos()`, trigger de 9 pasajes, precio congelado |
-| — | Pago en línea | `pago`, `compra` | `registrar_pago()`, máquina de estados de pago, solo últimos 4 dígitos, id de transacción único |
+| US9 | Pago en línea | `transaccion_pago`, `pago`, `compra`, `auditoria` | uuid único por transacción, `uq_transaccion_pago_compra_activa`, `iniciar/tomar/resolver_transaccion_pago()`, `registrar_pago()`, solo últimos 4 dígitos, id de pasarela único |
 | — | Envío de pasajes y factura por email | `factura`, `notificacion` (`CONFIRMACION`) | outbox encolado al confirmar el pago |
 | — | Venta en mostrador | `compra` (`canal = MOSTRADOR`, `empleado_id`, `usuario_id` NULL), `pago` (`EFECTIVO`) | CHECK canal ↔ empleado, validación de rol del empleado |
 | — | Mostrador consulta documentación de pasajeros | `pasaje`, `compra`, `factura` | `ix_pasaje_documento`, `ix_pasaje_apellido`, `uq_compra_codigo`, `ix_compra_email` |
@@ -491,10 +520,11 @@ Cada historia se ejecutó contra una base creada desde cero con `01`–`03`:
 
 | US | Qué se comprobó | Evidencia | Resultado |
 |---|---|---|---|
-| US2 | Capacidad por clase, límite de 9 pasajes, estados de compra, pasaje y pago, reservas vencidas, notificaciones, borrado lógico | [db/04_tests.sql](../db/04_tests.sql) | 37/37 |
+| US2 | Capacidad por clase, límite de 9 pasajes, estados de compra, pasaje y pago, reservas vencidas, notificaciones, borrado lógico | [db/04_tests.sql](../db/04_tests.sql) | 47/47 (T38–T47 son de US9) |
 | US4 | Login con hash, roles y permisos leídos de `rol_permiso`, denegaciones por rol, edición de cuentas (datos, `activo`, `rol`) con auditoría | [tests/http/us4-edicion-usuarios.mjs](../tests/http/us4-edicion-usuarios.mjs) y accesos A01–A05 de [pruebas-alta-vuelos.md](pruebas-alta-vuelos.md) | 23/23 |
 | US5 | Alta de vuelo con días, clases, salidas y capacidades por salida en una transacción; rechazo de datos inválidos y duplicados; auditoría | [tests/http/us5-alta-vuelos.mjs](../tests/http/us5-alta-vuelos.mjs) | 47/47 |
 | US7 | Búsqueda por código, ciudad o aeropuerto y rango de fechas; clases agotadas; casos sin resultados | [tests/http/us7-busqueda.mjs](../tests/http/us7-busqueda.mjs) | 18/18 |
+| US9 | Transacciones con UUID, idempotencia (reintentos y 5 envíos simultáneos), aprobado/rechazado/pendiente, webhook firmado, polling, reembolso tardío, PAN/CVV fuera del sistema | [tests/http/us9-pago-en-linea.mjs](../tests/http/us9-pago-en-linea.mjs) y [pruebas-pago-en-linea.md](pruebas-pago-en-linea.md) | 21/21 (sandbox local) |
 | US11 | Control de disponibilidad por vuelo/fecha/clase, reserva temporal con TTL de 10 min, confirmación atómica y concurrencia sobre últimos asientos | [tests/http/us11-disponibilidad-concurrencia.mjs](../tests/http/us11-disponibilidad-concurrencia.mjs) y [pruebas-disponibilidad-sobreventa.md](pruebas-disponibilidad-sobreventa.md) | 6/6 (`--self-test`) + T36–T37 |
 
 Ajustes que surgieron de la validación:

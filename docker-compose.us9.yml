@@ -1,0 +1,10 @@
+# Base aislada para ejecutar las pruebas de pago en línea (US9).
+# Usar con -p aeronet-us9 y AERONET_DB_PORT=3314.
+services:
+  db:
+    container_name: aeronet-us9-db
+    volumes:
+      - aeronet-us9-data:/var/lib/mysql
+
+volumes:
+  aeronet-us9-data:

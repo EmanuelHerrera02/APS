@@ -35,6 +35,35 @@ object EmailQueueWorker {
     case _ => false
   }
 
+  /**
+   * Avisos de configuración que no impiden arrancar pero dejan sin cumplir parte de la US10:
+   * sin webhook no se registran entregas/rebotes, sin TLS el envío viaja en claro y un
+   * remitente fuera del dominio autenticado no queda alineado con SPF/DKIM (DMARC).
+   */
+  def configurationWarnings: List[String] = {
+    def env(name: String) = sys.env.get(name).map(_.trim).filter(_.nonEmpty)
+    val from = env("AERONET_SMTP_FROM").getOrElse("")
+    val fromDomain = from.split("@").lift(1).map(_.stripSuffix(">").trim.toLowerCase(java.util.Locale.ROOT))
+    val host = env("AERONET_SMTP_HOST").getOrElse("").toLowerCase(java.util.Locale.ROOT)
+    val localHost = Set("localhost", "127.0.0.1", "::1", "mail", "aeronet-mail").contains(host)
+    List(
+      Option.when(fromDomain.isEmpty)("AERONET_SMTP_FROM no es una dirección válida"),
+      Option.when(provider == "sendgrid" && env("AERONET_SENDGRID_WEBHOOK_PUBLIC_KEY").isEmpty)(
+        "Falta AERONET_SENDGRID_WEBHOOK_PUBLIC_KEY: no se registrarán entregas, rebotes ni descartes"),
+      Option.when(provider == "smtp" && env("AERONET_EMAIL_WEBHOOK_SECRET").forall(_.length < 32))(
+        "Falta AERONET_EMAIL_WEBHOOK_SECRET: las notificaciones quedarán en ENVIADA sin estado final de entrega"),
+      Option.when(provider == "smtp" && !localHost &&
+        !sys.env.get("AERONET_SMTP_STARTTLS").forall(_.equalsIgnoreCase("true")) &&
+        !sys.env.get("AERONET_SMTP_SSL").exists(_.equalsIgnoreCase("true")))(
+        s"SMTP hacia $host sin STARTTLS ni TLS: usá AERONET_SMTP_STARTTLS=true o AERONET_SMTP_SSL=true"),
+      for {
+        domain <- env("AERONET_EMAIL_DOMAIN").map(_.toLowerCase(java.util.Locale.ROOT))
+        sender <- fromDomain
+        if sender != domain && !sender.endsWith(s".$domain")
+      } yield s"El remitente $from no pertenece al dominio autenticado $domain (DMARC no quedará alineado)"
+    ).flatten
+  }
+
   private def db(): Connection = {
     val url = sys.env.getOrElse("AERONET_JDBC_URL", "")
     val user = sys.env.getOrElse("AERONET_DB_USER", "")
@@ -52,6 +81,12 @@ object EmailQueueWorker {
     properties.setProperty("mail.smtp.connectiontimeout", "10000")
     properties.setProperty("mail.smtp.timeout", "15000")
     properties.setProperty("mail.smtp.writetimeout", "15000")
+    // Sin estos valores JavaMail resuelve el nombre canónico del equipo (DNS inverso) para el
+    // EHLO y el Message-ID en cada mensaje, lo que puede sumar varios segundos por envío.
+    val from = sys.env("AERONET_SMTP_FROM").trim
+    properties.setProperty("mail.from", from)
+    properties.setProperty("mail.smtp.localhost", sys.env.get("AERONET_SMTP_EHLO_NAME").map(_.trim).filter(_.nonEmpty)
+      .getOrElse(from.split("@").lift(1).map(_.stripSuffix(">").trim).filter(_.nonEmpty).getOrElse("localhost")))
     val credentials = for {
       user <- sys.env.get("AERONET_SMTP_USER").filter(_.nonEmpty)
       password <- sys.env.get("AERONET_SMTP_PASSWORD")
@@ -212,7 +247,13 @@ object EmailQueueWorker {
     multipart.addBodyPart(text)
     content.attachments.foreach { path =>
       val attachment = new MimeBodyPart()
-      attachment.setDataHandler(new jakarta.activation.DataHandler(new FileDataSource(path.toFile)))
+      // FileDataSource no reconoce .pdf en todos los sistemas y lo enviaría como octet-stream.
+      val source = new FileDataSource(path.toFile) {
+        override def getContentType: String =
+          if (path.getFileName.toString.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")) "application/pdf"
+          else super.getContentType
+      }
+      attachment.setDataHandler(new jakarta.activation.DataHandler(source))
       attachment.setFileName(path.getFileName.toString)
       multipart.addBodyPart(attachment)
     }
@@ -223,7 +264,9 @@ object EmailQueueWorker {
   /** Sends through SendGrid v3 while carrying a non-PII outbox ID into event callbacks. */
   private def sendWithSendGrid(job: MailJob, content: MailContent): Unit = {
     val attachments = content.attachments.map { path =>
-      val mimeType = Option(Files.probeContentType(path)).getOrElse("application/octet-stream")
+      val mimeType =
+        if (path.getFileName.toString.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")) "application/pdf"
+        else Option(Files.probeContentType(path)).getOrElse("application/octet-stream")
       JObject(
         "content" -> JString(Base64.getEncoder.encodeToString(Files.readAllBytes(path))),
         "type" -> JString(mimeType),

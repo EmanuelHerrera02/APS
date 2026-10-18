@@ -373,6 +373,50 @@ CREATE TABLE pago (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------------------------
+-- transaccion_pago (US9): intento de cobro en línea contra la pasarela.
+-- uuid es la clave de idempotencia que se envía a la pasarela (X-Idempotency-Key)
+-- y su external_reference. Los datos de tarjeta se tokenizan en el navegador
+-- directamente contra la pasarela: acá nunca llegan PAN ni CVV.
+-- compra_bloqueada impide dos transacciones activas o aprobadas para una compra.
+-- -----------------------------------------------------------------------------
+CREATE TABLE transaccion_pago (
+  id                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  uuid              CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  compra_id         BIGINT UNSIGNED NOT NULL,
+  pasarela          ENUM('MERCADOPAGO') NOT NULL DEFAULT 'MERCADOPAGO',
+  monto             DECIMAL(12,2)   NOT NULL,
+  moneda            CHAR(3)         NOT NULL DEFAULT 'ARS',
+  estado            ENUM('CREADA','PROCESANDO','PENDIENTE','APROBADA','RECHAZADA','ERROR','REEMBOLSADA')
+                    NOT NULL DEFAULT 'CREADA',
+  id_pago_pasarela  VARCHAR(64)     NULL,
+  estado_pasarela   VARCHAR(40)     NULL,       -- status informado por la pasarela (approved, in_process…)
+  detalle_estado    VARCHAR(100)    NULL,       -- status_detail o motivo del error
+  resultado_compra  VARCHAR(20)     NULL,       -- resultado de registrar_pago()
+  pago_id           BIGINT UNSIGNED NULL,
+  consultas         SMALLINT        NOT NULL DEFAULT 0,
+  compra_bloqueada  BIGINT UNSIGNED AS (CASE WHEN estado IN ('CREADA','PROCESANDO','PENDIENTE','APROBADA')
+                                             THEN compra_id END) PERSISTENT,
+  created_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_transaccion_pago_uuid (uuid),
+  UNIQUE KEY uq_transaccion_pago_pasarela (pasarela, id_pago_pasarela),
+  UNIQUE KEY uq_transaccion_pago_compra_activa (compra_bloqueada),
+  UNIQUE KEY uq_transaccion_pago_pago (pago_id),
+  KEY ix_transaccion_pago_compra (compra_id, created_at),
+  KEY ix_transaccion_pago_conciliacion (estado, updated_at),
+  CONSTRAINT fk_transaccion_pago_compra FOREIGN KEY (compra_id)
+    REFERENCES compra (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT fk_transaccion_pago_pago FOREIGN KEY (pago_id)
+    REFERENCES pago (id) ON DELETE RESTRICT ON UPDATE RESTRICT,
+  CONSTRAINT chk_transaccion_pago_uuid
+    CHECK (uuid REGEXP BINARY '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'),
+  CONSTRAINT chk_transaccion_pago_monto CHECK (monto > 0),
+  CONSTRAINT chk_transaccion_pago_resuelta
+    CHECK (estado NOT IN ('APROBADA','RECHAZADA','REEMBOLSADA') OR (id_pago_pasarela IS NOT NULL AND pago_id IS NOT NULL))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
 -- factura: comprobante de una compra confirmada.
 -- -----------------------------------------------------------------------------
 CREATE TABLE factura (

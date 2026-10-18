@@ -144,8 +144,22 @@
 .trip-reservation-message { margin: 0 0 14px; padding: 10px 12px; border-radius: 8px; font-size: 12px; }
 .trip-reservation-message.is-error { color: #9c2f28; background: #fff1f0; }
 .trip-reservation-message.is-success { color: #126342; background: #edf9f2; }
+.trip-reservation-message.is-pending { color: #7a4e00; background: #fff7e3; }
+.trip-payment-panel { box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 18px; padding: 18px 20px; border: 1px solid #bed2eb; border-radius: 14px; background: #fff; }
+.trip-payment-panel h3 { margin: 6px 0 0; color: var(--trip-ink); font-size: 17px; }
+.trip-payment-panel .trip-reservation-message { margin: 0; }
+.trip-payment-amount { color: #1e5d9e; font-size: 19px; font-weight: 800; }
+.trip-payment-sandbox { margin: 0; padding: 9px 12px; border-radius: 8px; color: #0b5a85; background: #ecf7ff; font-size: 12px; }
+.trip-payment-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; margin: 0; }
+.trip-payment-meta > div { display: grid; gap: 4px; min-width: 0; }
+.trip-payment-meta dt { color: #8291a4; font-size: 10px; }
+.trip-payment-meta dd { margin: 0; color: #344b66; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+.trip-payment-meta code { font-size: 11px; }
+.trip-payment-hint { margin: 0; color: var(--trip-muted); font-size: 12px; }
+.trip-payment-brick { min-height: 120px; }
 .trip-purchases-card { margin: 24px 0 32px; padding: 24px; border: 1px solid #e4eaf2; border-radius: 16px; background: #fff; box-shadow: 0 12px 34px rgba(27, 51, 82, .06); }
-.trip-purchase-document { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 0; border-top: 1px solid #edf1f5; color: #344b66; font-size: 12px; }
+.trip-purchase-document { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 16px 0; border-top: 1px solid #edf1f5; color: #344b66; font-size: 12px; }
+.trip-purchase-document > .trip-payment-panel { flex: 1 0 100%; margin-top: 0; }
 .trip-purchase-document > div:first-child { display: grid; gap: 6px; }
 .trip-purchase-document > div:first-child strong { color: #203a59; font-size: 14px; }
 .trip-document-actions { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -201,4 +215,7 @@
   .trip-purchase-summary .trip-search-submit { width: 100%; }
   .trip-purchases-card { margin: 16px 8px 26px; padding: 18px 14px; }
   .trip-purchase-document { align-items: flex-start; flex-direction: column; }
+  .trip-purchase-document > .trip-payment-panel { width: 100%; }
+  .trip-payment-panel { padding: 16px 12px; }
+  .trip-payment-meta { grid-template-columns: 1fr; }
 }

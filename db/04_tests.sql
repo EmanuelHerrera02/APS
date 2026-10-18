@@ -664,6 +664,214 @@ BEGIN NOT ATOMIC
       AND v_disp_final = 18);
 END//
 
+-- -----------------------------------------------------------------------------
+-- US9 — Pago en línea: transacciones con uuid, idempotencia y efecto sobre la compra.
+-- -----------------------------------------------------------------------------
+
+-- T38. Resultado esperado: iniciar_transaccion_pago crea la transacción con el uuid
+-- recibido y, mientras está activa, devuelve la misma aunque se pida con otro uuid.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  SET @s_t38 = (SELECT id FROM salida WHERE vuelo_id = @v AND fecha = CURDATE() + INTERVAL 10 DAY);
+  CALL crear_compra(@s_t38, @juan, NULL, 'WEB', 'juan.perez@gmail.com', @uno_eco, @c_t38);
+  CALL iniciar_transaccion_pago(@c_t38, @juan, '38000000-0000-4000-8000-000000000001', @tx_t38a);
+  CALL iniciar_transaccion_pago(@c_t38, @juan, '38000000-0000-4000-8000-000000000002', @tx_t38b);
+  INSERT INTO resultado_test VALUES ('T38', 'US9 UUID por transacción',
+    'Una compra tiene una sola transacción activa: el segundo inicio devuelve el mismo uuid',
+    'uuid …0001 en ambos inicios; 1 transacción CREADA con monto = total de la compra',
+    COALESCE(v_err, CONCAT(COALESCE(@tx_t38a, 'NULL'), ' / ', COALESCE(@tx_t38b, 'NULL'), '; transacciones=',
+      (SELECT COUNT(*) FROM transaccion_pago WHERE compra_id = @c_t38))),
+    v_err IS NULL
+      AND @tx_t38a = '38000000-0000-4000-8000-000000000001' AND @tx_t38b = @tx_t38a
+      AND (SELECT COUNT(*) FROM transaccion_pago WHERE compra_id = @c_t38) = 1
+      AND (SELECT estado FROM transaccion_pago WHERE uuid = @tx_t38a) = 'CREADA'
+      AND (SELECT monto FROM transaccion_pago WHERE uuid = @tx_t38a) = (SELECT total FROM compra WHERE id = @c_t38));
+END//
+
+-- T39. Resultado esperado: ERROR al insertar una segunda transacción activa para la misma compra.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  SET @total_t38 = (SELECT total FROM compra WHERE id = @c_t38);
+  INSERT INTO transaccion_pago (uuid, compra_id, monto)
+  VALUES ('39000000-0000-4000-8000-000000000001', @c_t38, @total_t38);
+  INSERT INTO resultado_test VALUES ('T39', 'US9 Bloqueo de doble procesamiento',
+    'El índice único impide dos transacciones activas para la misma compra',
+    'ERROR Duplicate entry … uq_transaccion_pago_compra_activa',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE '%uq_transaccion_pago_compra_activa%'
+      AND (SELECT COUNT(*) FROM transaccion_pago WHERE compra_id = @c_t38) = 1);
+END//
+
+-- T40. Resultado esperado: el pago aprobado confirma la compra y emite el pasaje;
+-- repetir la misma notificación de la pasarela no registra un segundo pago.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  CALL tomar_transaccion_pago(@tx_t38a, @juan, @accion_t40);
+  CALL resolver_transaccion_pago(@tx_t38a, 'APROBADA', '9040001', 'approved', 'accredited',
+                                 @total_t38, 'TARJETA_CREDITO', 'visa', '3704', @r_t40a);
+  CALL resolver_transaccion_pago(@tx_t38a, 'APROBADA', '9040001', 'approved', 'accredited',
+                                 @total_t38, 'TARJETA_CREDITO', 'visa', '3704', @r_t40b);
+  INSERT INTO resultado_test VALUES ('T40', 'US9 Aprobado confirma e idempotencia',
+    'APROBADA confirma la compra; una notificación repetida no duplica el pago',
+    'PROCESAR; CONFIRMADA dos veces; 1 pago MP-9040001 APROBADO; pasaje EMITIDO',
+    COALESCE(v_err, CONCAT(COALESCE(@accion_t40, 'NULL'), '; ', COALESCE(@r_t40a, 'NULL'), ' / ', COALESCE(@r_t40b, 'NULL'),
+      '; pagos=', (SELECT COUNT(*) FROM pago WHERE compra_id = @c_t38))),
+    v_err IS NULL AND @accion_t40 = 'PROCESAR'
+      AND @r_t40a = 'CONFIRMADA' AND @r_t40b = 'CONFIRMADA'
+      AND (SELECT estado FROM compra WHERE id = @c_t38) = 'CONFIRMADA'
+      AND (SELECT COUNT(*) FROM pago WHERE compra_id = @c_t38) = 1
+      AND (SELECT COUNT(*) FROM pago WHERE compra_id = @c_t38 AND estado = 'APROBADO'
+             AND id_transaccion_pasarela = 'MP-9040001' AND ultimos_4 = '3704') = 1
+      AND (SELECT COUNT(*) FROM pasaje WHERE compra_id = @c_t38 AND estado = 'EMITIDO') = 1
+      AND (SELECT pago_id IS NOT NULL AND estado = 'APROBADA' FROM transaccion_pago WHERE uuid = @tx_t38a));
+END//
+
+-- T41. Resultado esperado: el pago rechazado cancela la compra y libera los asientos reservados.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE v_disp_inicial INT;
+  DECLARE v_disp_reserva INT;
+  DECLARE v_disp_final INT;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  SET @s_t41 = (SELECT id FROM salida WHERE vuelo_id = @v AND fecha = CURDATE() + INTERVAL 11 DAY);
+  SET v_disp_inicial = (SELECT asientos_disponibles FROM v_disponibilidad WHERE salida_id = @s_t41 AND clase = 'ECONOMY');
+  CALL crear_compra(@s_t41, @maria, NULL, 'WEB', 'maria.gonzalez@hotmail.com', @dos_eco, @c_t41);
+  SET v_disp_reserva = (SELECT asientos_disponibles FROM v_disponibilidad WHERE salida_id = @s_t41 AND clase = 'ECONOMY');
+  SET @total_t41 = (SELECT total FROM compra WHERE id = @c_t41);
+  CALL iniciar_transaccion_pago(@c_t41, @maria, '41000000-0000-4000-8000-000000000001', @tx_t41);
+  CALL tomar_transaccion_pago(@tx_t41, @maria, @accion_t41);
+  CALL resolver_transaccion_pago(@tx_t41, 'RECHAZADA', '9041001', 'rejected', 'cc_rejected_other_reason',
+                                 @total_t41, 'TARJETA_CREDITO', 'master', '0604', @r_t41);
+  SET v_disp_final = (SELECT asientos_disponibles FROM v_disponibilidad WHERE salida_id = @s_t41 AND clase = 'ECONOMY');
+  INSERT INTO resultado_test VALUES ('T41', 'US9 Rechazado libera reservas',
+    'RECHAZADA cancela la compra, cancela sus pasajes y devuelve los asientos',
+    'CANCELADA; disponibles 20 -> 18 -> 20; transacción RECHAZADA',
+    COALESCE(v_err, CONCAT(COALESCE(@r_t41, 'NULL'), '; disponibles ', v_disp_inicial, ' -> ', v_disp_reserva, ' -> ', v_disp_final)),
+    v_err IS NULL AND @r_t41 = 'CANCELADA'
+      AND v_disp_inicial = 20 AND v_disp_reserva = 18 AND v_disp_final = 20
+      AND (SELECT estado FROM compra WHERE id = @c_t41) = 'CANCELADA'
+      AND (SELECT COUNT(*) FROM pasaje WHERE compra_id = @c_t41 AND estado <> 'CANCELADO') = 0
+      AND (SELECT estado FROM transaccion_pago WHERE uuid = @tx_t41) = 'RECHAZADA'
+      AND (SELECT detalle_estado FROM transaccion_pago WHERE uuid = @tx_t41) = 'cc_rejected_other_reason');
+END//
+
+-- T42. Resultado esperado: un pago pendiente mantiene la compra en PENDIENTE_PAGO
+-- con los asientos reservados; la aprobación posterior la confirma.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE v_compra_pendiente VARCHAR(20);
+  DECLARE v_disp_pendiente INT;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  CALL crear_compra(@s_t41, @juan, NULL, 'WEB', 'juan.perez@gmail.com', @uno_eco, @c_t42);
+  SET @total_t42 = (SELECT total FROM compra WHERE id = @c_t42);
+  CALL iniciar_transaccion_pago(@c_t42, @juan, '42000000-0000-4000-8000-000000000001', @tx_t42);
+  CALL tomar_transaccion_pago(@tx_t42, @juan, @accion_t42);
+  CALL resolver_transaccion_pago(@tx_t42, 'PENDIENTE', '9042001', 'in_process', 'pending_contingency',
+                                 @total_t42, 'TARJETA_CREDITO', 'visa', '3704', @r_t42a);
+  SET v_compra_pendiente = (SELECT estado FROM compra WHERE id = @c_t42);
+  SET v_disp_pendiente = (SELECT asientos_disponibles FROM v_disponibilidad WHERE salida_id = @s_t41 AND clase = 'ECONOMY');
+  CALL resolver_transaccion_pago(@tx_t42, 'APROBADA', '9042001', 'approved', 'accredited',
+                                 @total_t42, 'TARJETA_CREDITO', 'visa', '3704', @r_t42b);
+  INSERT INTO resultado_test VALUES ('T42', 'US9 Pendiente y aprobación asincrónica',
+    'PENDIENTE conserva la reserva; la confirmación posterior de la pasarela confirma la compra',
+    'PENDIENTE; compra PENDIENTE_PAGO con 19 disponibles; luego CONFIRMADA',
+    COALESCE(v_err, CONCAT(COALESCE(@r_t42a, 'NULL'), '; compra ', COALESCE(v_compra_pendiente, 'NULL'),
+      ' con ', COALESCE(v_disp_pendiente, -1), ' disponibles; luego ', COALESCE(@r_t42b, 'NULL'))),
+    v_err IS NULL AND @r_t42a = 'PENDIENTE' AND v_compra_pendiente = 'PENDIENTE_PAGO'
+      AND v_disp_pendiente = 19 AND @r_t42b = 'CONFIRMADA'
+      AND (SELECT estado FROM compra WHERE id = @c_t42) = 'CONFIRMADA'
+      AND (SELECT estado FROM transaccion_pago WHERE uuid = @tx_t42) = 'APROBADA');
+END//
+
+-- T43. Resultado esperado: ERROR si el importe informado por la pasarela no coincide;
+-- no se registra pago y la compra sigue pendiente.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  CALL crear_compra(@s_t41, @maria, NULL, 'WEB', 'maria.gonzalez@hotmail.com', @uno_eco, @c_t43);
+  SET @total_t43 = (SELECT total FROM compra WHERE id = @c_t43);
+  CALL iniciar_transaccion_pago(@c_t43, @maria, '43000000-0000-4000-8000-000000000001', @tx_t43);
+  CALL tomar_transaccion_pago(@tx_t43, @maria, @accion_t43);
+  CALL resolver_transaccion_pago(@tx_t43, 'APROBADA', '9043001', 'approved', 'accredited',
+                                 1.00, 'TARJETA_CREDITO', 'visa', '3704', @r_t43);
+  INSERT INTO resultado_test VALUES ('T43', 'US9 Importe de la pasarela',
+    'Un importe distinto al de la transacción no confirma la compra ni registra el pago',
+    'ERROR El importe informado por la pasarela no coincide con la transacción',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'El importe informado por la pasarela no coincide con la transacción%'
+      AND (SELECT COUNT(*) FROM pago WHERE compra_id = @c_t43) = 0
+      AND (SELECT estado FROM compra WHERE id = @c_t43) = 'PENDIENTE_PAGO'
+      AND (SELECT estado FROM transaccion_pago WHERE uuid = @tx_t43) = 'PROCESANDO');
+END//
+
+-- T44. Resultado esperado: un pago aprobado sobre una reserva vencida expira la compra,
+-- pide reembolso y el reembolso queda registrado una sola vez.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  UPDATE compra SET expira_en = NOW() - INTERVAL 1 SECOND WHERE id = @c_t43;
+  CALL resolver_transaccion_pago(@tx_t43, 'APROBADA', '9043001', 'approved', 'accredited',
+                                 @total_t43, 'TARJETA_CREDITO', 'visa', '3704', @r_t44);
+  CALL registrar_reembolso_transaccion(@tx_t43);
+  CALL registrar_reembolso_transaccion(@tx_t43);
+  INSERT INTO resultado_test VALUES ('T44', 'US9 Aprobación tardía y reembolso',
+    'Aprobación con la reserva vencida: compra EXPIRADA, REQUIERE_REEMBOLSO y reembolso idempotente',
+    'REQUIERE_REEMBOLSO; compra EXPIRADA; transacción REEMBOLSADA; pago REEMBOLSADO',
+    COALESCE(v_err, CONCAT(COALESCE(@r_t44, 'NULL'), '; compra ', (SELECT estado FROM compra WHERE id = @c_t43),
+      '; transacción ', (SELECT estado FROM transaccion_pago WHERE uuid = @tx_t43))),
+    v_err IS NULL AND @r_t44 = 'REQUIERE_REEMBOLSO'
+      AND (SELECT estado FROM compra WHERE id = @c_t43) = 'EXPIRADA'
+      AND (SELECT estado FROM transaccion_pago WHERE uuid = @tx_t43) = 'REEMBOLSADA'
+      AND (SELECT COUNT(*) FROM pago WHERE compra_id = @c_t43 AND estado = 'REEMBOLSADO') = 1
+      AND (SELECT COUNT(*) FROM pago WHERE compra_id = @c_t43) = 1);
+END//
+
+-- T45. Resultado esperado: ERROR si otro usuario intenta iniciar el pago de una compra ajena.
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  CALL crear_compra(@s_t41, @juan, NULL, 'WEB', 'juan.perez@gmail.com', @uno_eco, @c_t45);
+  CALL iniciar_transaccion_pago(@c_t45, @maria, '45000000-0000-4000-8000-000000000001', @tx_t45);
+  INSERT INTO resultado_test VALUES ('T45', 'US9 Pago de compra ajena',
+    'Solo el comprador puede iniciar el pago; para otro usuario la compra no existe',
+    'ERROR La compra no existe; sin transacciones',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'La compra no existe%'
+      AND (SELECT COUNT(*) FROM transaccion_pago WHERE compra_id = @c_t45) = 0);
+END//
+
+-- T46. Resultado esperado: ERROR al reabrir una transacción RECHAZADA (estado final).
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  UPDATE transaccion_pago SET estado = 'APROBADA' WHERE uuid = @tx_t41;
+  INSERT INTO resultado_test VALUES ('T46', 'US9 Estados de transacción',
+    'Una transacción RECHAZADA no puede pasar a APROBADA',
+    'ERROR Transición de estado de transacción de pago inválida: RECHAZADA -> APROBADA',
+    COALESCE(v_err, 'sin error'),
+    v_err LIKE 'Transición de estado de transacción de pago inválida: RECHAZADA -> APROBADA%');
+END//
+
+-- T47. Resultado esperado: cada cambio de estado de la transacción queda en auditoria
+-- con su uuid (CREADA -> PROCESANDO -> RECHAZADA).
+BEGIN NOT ATOMIC
+  DECLARE v_err VARCHAR(512) DEFAULT NULL;
+  DECLARE v_traza VARCHAR(200);
+  DECLARE CONTINUE HANDLER FOR SQLEXCEPTION GET DIAGNOSTICS CONDITION 1 v_err = MESSAGE_TEXT;
+  SET v_traza = (SELECT GROUP_CONCAT(JSON_UNQUOTE(JSON_EXTRACT(detalles, '$.estado')) ORDER BY id SEPARATOR ' -> ')
+                   FROM auditoria
+                  WHERE entidad = 'transaccion_pago' AND accion = 'PAGO_TRANSACCION'
+                    AND JSON_UNQUOTE(JSON_EXTRACT(detalles, '$.uuid')) = @tx_t41);
+  INSERT INTO resultado_test VALUES ('T47', 'US9 Estado rastreable',
+    'La auditoría registra la creación y cada transición de la transacción',
+    'CREADA -> PROCESANDO -> RECHAZADA',
+    COALESCE(v_err, COALESCE(v_traza, 'sin registros')),
+    v_err IS NULL AND v_traza = 'CREADA -> PROCESANDO -> RECHAZADA');
+END//
+
 DELIMITER ;
 
 -- =============================================================================
@@ -674,7 +882,7 @@ SELECT caso, requisito, prueba, esperado, obtenido,
   FROM resultado_test ORDER BY caso;
 
 SELECT COUNT(*) AS casos, SUM(ok) AS pasan, SUM(NOT ok) AS fallan,
-       IF(SUM(NOT ok) = 0 AND COUNT(*) = 37, 'TODOS LOS CASOS PASAN', 'HAY CASOS QUE FALLAN') AS resumen
+       IF(SUM(NOT ok) = 0 AND COUNT(*) = 47, 'TODOS LOS CASOS PASAN', 'HAY CASOS QUE FALLAN') AS resumen
   FROM resultado_test;
 
 SET @casos_ok = (SELECT COUNT(*) FROM resultado_test WHERE ok);
@@ -684,7 +892,7 @@ ROLLBACK;
 -- Termina con error si algún caso falló o no se ejecutó (útil en CI).
 DELIMITER //
 BEGIN NOT ATOMIC
-  IF @casos_ok <> 37 THEN
+  IF @casos_ok <> 47 THEN
     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '04_tests.sql: hay casos que fallan';
   END IF;
 END//

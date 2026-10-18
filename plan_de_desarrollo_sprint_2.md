@@ -60,12 +60,12 @@ Este documento detalla la distribución de tareas para el Sprint 2. Está dividi
 **Objetivo:** Integrar una pasarela de pago segura, manejar transacciones únicas y procesar los estados de los pagos sin guardar datos sensibles de tarjetas.
 
 ### Tareas a Implementar:
-- [ ] Seleccionar y configurar entorno de pruebas de la pasarela de pagos. *(4 horas)*
-- [ ] Desarrollar módulo de integración aislado para la pasarela de pagos. *(8 horas)*
-- [ ] Generar e implementar identificadores únicos (UUID) por transacción para evitar cobros duplicados. *(5 horas)*
-- [ ] Implementar Webhooks/Polling para confirmación asincrónica de pago y estados (aprobado, rechazado, pendiente). *(6 horas)*
-- [ ] Desarrollar UI de pago seguro y mensajes de feedback al usuario. *(4 horas)*
-- [ ] Probar flujo completo con tarjetas de prueba (aprobación, rechazo, pendiente). *(5 horas)*
+- [x] Seleccionar y configurar entorno de pruebas de la pasarela de pagos. *(4 horas)* Mercado Pago (Checkout API + Card Payment Brick); configuración por variables `AERONET_MP_*` y sandbox local en `tests/sandbox/mercadopago-sandbox.mjs`. Ver `docs/us9/pasarela-de-pago.md`.
+- [x] Desarrollar módulo de integración aislado para la pasarela de pagos. *(8 horas)* Paquete `payments` (`PaymentGateway`, `MercadoPagoGateway`, `PaymentService`) y endpoints `/payments/*`.
+- [x] Generar e implementar identificadores únicos (UUID) por transacción para evitar cobros duplicados. *(5 horas)* Tabla `transaccion_pago` con UUID v4 como `X-Idempotency-Key`, una transacción activa por compra y procedimientos idempotentes.
+- [x] Implementar Webhooks/Polling para confirmación asincrónica de pago y estados (aprobado, rechazado, pendiente). *(6 horas)* Webhook firmado `/webhooks/payments/mercadopago` y conciliador periódico con búsqueda por `external_reference`.
+- [x] Desarrollar UI de pago seguro y mensajes de feedback al usuario. *(4 horas)* `PaymentPanel.jsx`: formulario de la pasarela, cuenta regresiva de la reserva, motivos de rechazo y polling del estado pendiente.
+- [x] Probar flujo completo con tarjetas de prueba (aprobación, rechazo, pendiente). *(5 horas)* `04_tests.sql` 47/47 y `tests/http/us9-pago-en-linea.mjs` 21/21 contra el sandbox local; falta repetir el checklist manual con las credenciales de prueba reales de Mercado Pago (`docs/pruebas-pago-en-linea.md`, sección 4).
 
 ### Criterios de Aceptación:
 - Datos de tarjeta procesados directamente en la pasarela (sistema local no guarda PAN ni CVV).
@@ -87,7 +87,7 @@ Este documento detalla la distribución de tareas para el Sprint 2. Está dividi
 ### Tareas a Implementar:
 - [x] Diseñar templates (PDF/HTML) para pasaje electrónico y factura. *(3 horas)*
 - [x] Desarrollar la lógica de generación de pasajes y factura post-confirmación de pago. *(5 horas)*
-- [ ] Configurar servidor/servicio de envío de correos (SPF, DKIM, DMARC) y sistema de colas/reintentos. *(4 horas)* Código de cola, reintentos y callbacks implementado; falta configurar proveedor real y publicar SPF/DKIM/DMARC del dominio.
+- [x] Configurar servidor/servicio de envío de correos (SPF, DKIM, DMARC) y sistema de colas/reintentos. *(4 horas)* Mailpit como SMTP de desarrollo (`docker compose --profile correo up -d mail`), `tools/email/sendgrid-configurar.mjs` (autenticación de dominio, DNS a publicar y webhook firmado), `tools/email/verificar-dns-correo.mjs` (SPF/DKIM/DMARC), avisos de configuración al iniciar y envío SMTP de ~19 s a ~40 ms por correo. Pendiente fuera del repositorio: ejecutar los scripts con la cuenta de SendGrid y publicar los registros en el DNS del dominio real.
 - [x] Implementar endpoint y UI para descarga manual de pasajes/factura desde la web. *(2 horas)*
 - [x] Escribir y ejecutar pruebas de emisión, envío asíncrono, descargas y manejo de correos fallidos. *(3 horas)* Prueba integrada: 18/18 casos aprobados.
 
