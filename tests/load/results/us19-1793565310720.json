@@ -1,0 +1,35 @@
+{
+  "story": "US19",
+  "generatedAt": "2026-11-01T20:35:40.699Z",
+  "apiUrl": "http://localhost:8080",
+  "concurrency": 200,
+  "flightCode": "L90720",
+  "departureId": 598,
+  "date": "2026-11-03",
+  "searches": {
+    "total": 200,
+    "successful": 200,
+    "p95Ms": 3007.26,
+    "maxMs": "3078.97"
+  },
+  "purchases": {
+    "total": 200,
+    "successful": 200,
+    "p95Ms": 4456.97,
+    "maxMs": "4544.02"
+  },
+  "inventory": {
+    "soldOrReserved": 200,
+    "capacity": 220,
+    "pendingPurchases": 200,
+    "noOversell": true
+  },
+  "serverErrors": 0,
+  "failedRequests": 0,
+  "failures": [],
+  "acceptance": {
+    "p95UnderThreeSeconds": false,
+    "allRequestsSuccessful": true,
+    "noOversell": true
+  }
+}

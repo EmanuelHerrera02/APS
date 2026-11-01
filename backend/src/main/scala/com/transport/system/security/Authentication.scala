@@ -4,7 +4,7 @@ import com.password4j.{Argon2Function, Password}
 import com.transport.system.models.{LoginResponse, Role, User}
 import java.nio.charset.StandardCharsets
 import java.security.{MessageDigest, SecureRandom}
-import java.sql.{Connection, DriverManager}
+import java.sql.Connection
 import java.time.{LocalDateTime, ZoneOffset}
 import java.util.Base64
 import javax.crypto.Mac
@@ -26,7 +26,7 @@ object Authentication {
     val url = setting("AERONET_JDBC_URL")
     val user = setting("AERONET_DB_USER")
     if (url.isEmpty || user.isEmpty) throw new IllegalStateException("Database configuration is missing")
-    DriverManager.getConnection(url, user, setting("AERONET_DB_PASSWORD"))
+    DatabaseConnections.connection()
   }
   private def secret: Array[Byte] = {
     val value = setting("AERONET_JWT_SECRET")

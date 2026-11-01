@@ -3,17 +3,18 @@ package com.transport.system.controllers
 import com.transport.system.middleware.{AuthorizedAction, SecurityException}
 import com.transport.system.documents.PassengerDocumentService
 import com.transport.system.models.{Roles, Permissions}
-import com.transport.system.security.UserRepository
+import com.transport.system.security.{DatabaseConnections, UserRepository}
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import org.scalatra._
 import org.scalatra.json._
 import org.slf4j.LoggerFactory
-import java.sql.{CallableStatement, DriverManager, SQLException, Types}
+import java.sql.{CallableStatement, SQLException, Types}
 import java.nio.file.Files
 import java.time.LocalDate
 import java.time.ZoneId
 import scala.util.Try
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Controlador para funcionalidades de Pasajero
@@ -21,6 +22,7 @@ import scala.util.Try
 class PassengerController extends ScalatraServlet with JacksonJsonSupport with AuthorizedAction {
   protected implicit val jsonFormats: Formats = DefaultFormats
   val logger = LoggerFactory.getLogger(getClass)
+  private val lastReservationSweep = new AtomicLong(0L)
 
   /**
    * Patrón LIKE para ubicar un aeropuerto por ciudad o nombre. Desde 4 caracteres
@@ -113,6 +115,13 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
     } finally call.close()
   }
 
+  private def releaseExpiredReservationsIfDue(connection: java.sql.Connection): Unit = {
+    val now = System.currentTimeMillis()
+    val previous = lastReservationSweep.get()
+    if (now - previous >= 1000L && lastReservationSweep.compareAndSet(previous, now))
+      releaseExpiredReservations(connection)
+  }
+
   /**
    * Dos altas simultáneas pueden chocar en un deadlock de InnoDB (bloqueos de hueco sobre
    * uq_compra_codigo al generar el código en trg_compra_bi). crear_compra es atómica y la base
@@ -175,7 +184,7 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
       )
     })
     val payload = compact(render(passengerJson))
-    val connection = DriverManager.getConnection(jdbcUrl, dbUser, dbPassword)
+    val connection = DatabaseConnections.connection()
     try {
       try {
         retryOnDeadlock()(executeCreateReservation(connection, userId, departureId, email, payload))
@@ -240,9 +249,9 @@ class PassengerController extends ScalatraServlet with JacksonJsonSupport with A
                 |ORDER BY fecha, hora_partida, codigo_vuelo, clase""".stripMargin
 
             try {
-              val connection = DriverManager.getConnection(jdbcUrl, dbUser, dbPassword)
+              val connection = DatabaseConnections.connection()
               try {
-                releaseExpiredReservations(connection)
+                releaseExpiredReservationsIfDue(connection)
                 val statement = connection.prepareStatement(sql)
                 try {
                   statement.setString(1, origin)

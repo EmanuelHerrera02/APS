@@ -1,0 +1,35 @@
+{
+  "story": "US19",
+  "generatedAt": "2026-11-01T20:45:24.358Z",
+  "apiUrl": "http://localhost:8080",
+  "concurrency": 200,
+  "flightCode": "L90451",
+  "departureId": 601,
+  "date": "2026-11-03",
+  "searches": {
+    "total": 200,
+    "successful": 200,
+    "p95Ms": 1301.19,
+    "maxMs": "1307.81"
+  },
+  "purchases": {
+    "total": 200,
+    "successful": 200,
+    "p95Ms": 2058.4,
+    "maxMs": "2122.18"
+  },
+  "inventory": {
+    "soldOrReserved": 200,
+    "capacity": 220,
+    "pendingPurchases": 200,
+    "noOversell": true
+  },
+  "serverErrors": 0,
+  "failedRequests": 0,
+  "failures": [],
+  "acceptance": {
+    "p95UnderThreeSeconds": true,
+    "allRequestsSuccessful": true,
+    "noOversell": true
+  }
+}

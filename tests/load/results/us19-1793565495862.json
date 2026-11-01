@@ -1,0 +1,35 @@
+{
+  "story": "US19",
+  "generatedAt": "2026-11-01T20:38:44.458Z",
+  "apiUrl": "http://localhost:8080",
+  "concurrency": 200,
+  "flightCode": "L95862",
+  "departureId": 599,
+  "date": "2026-11-03",
+  "searches": {
+    "total": 200,
+    "successful": 200,
+    "p95Ms": 2246.89,
+    "maxMs": "2294.23"
+  },
+  "purchases": {
+    "total": 200,
+    "successful": 200,
+    "p95Ms": 3533.9,
+    "maxMs": "3576.11"
+  },
+  "inventory": {
+    "soldOrReserved": 200,
+    "capacity": 220,
+    "pendingPurchases": 200,
+    "noOversell": true
+  },
+  "serverErrors": 0,
+  "failedRequests": 0,
+  "failures": [],
+  "acceptance": {
+    "p95UnderThreeSeconds": false,
+    "allRequestsSuccessful": true,
+    "noOversell": true
+  }
+}

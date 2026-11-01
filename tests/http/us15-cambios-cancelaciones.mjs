@@ -64,6 +64,19 @@ function rowsFor(purchaseId) {
       AND tipo IN ('CAMBIO_HORARIO','CANCELACION') ORDER BY id;`);
 }
 
+function decodeQuotedPrintable(value) {
+  const source = value.replace(/=\r?\n/g, '');
+  const bytes = [];
+  for (let index = 0; index < source.length; index += 1) {
+    const encoded = source.slice(index + 1, index + 3);
+    if (source[index] === '=' && /^[0-9a-f]{2}$/i.test(encoded)) {
+      bytes.push(Number.parseInt(encoded, 16));
+      index += 2;
+    } else bytes.push(...new TextEncoder().encode(source[index]));
+  }
+  return new TextDecoder('utf-8').decode(Uint8Array.from(bytes));
+}
+
 try {
   await new Promise((resolve, reject) => { smtp.once('error', reject); smtp.listen(2526, '127.0.0.1', resolve); });
   const registered = await api('/auth/register', { method: 'POST', body: {
@@ -149,7 +162,7 @@ try {
   if (cancelFlight.status !== 200) throw new Error(`Cancelación completa: HTTP ${cancelFlight.status} ${cancelFlight.body.error || ''}`);
   const cancelNotice = await waitFor(() => rowsFor(purchaseId).find((row) => row[1] === 'CANCELACION' && row[2] === 'ENVIADA'));
   const cancellation = messages.find((message) => message.recipient === email.toLowerCase()
-    && /Motivo: Prueba US15: operación suspendida/i.test(message.body));
+    && /Motivo: Prueba US15: operación suspendida/i.test(decodeQuotedPrintable(message.body)));
   report.check('US15-04', 'Cancelación llega con el motivo indicado', Boolean(cancelNotice && cancellation),
     cancelNotice ? `estado=${cancelNotice[2]}, intentos=${cancelNotice[3]}` : 'sin entrega');
   report.check('US15-05', 'Aviso de cancelación aparece en la compra del pasajero',

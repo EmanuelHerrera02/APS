@@ -46,7 +46,7 @@ const cash = await sale({ departureId: Number(noAccountDeparture), emailContact:
   paymentMethod: 'EFECTIVO', passengers: passenger('cash', cashClass) });
 if (cash.status !== 201) throw new Error(`Venta en efectivo: HTTP ${cash.status} ${cash.body.error || ''}`);
 const cashPurchaseId = Number(cash.body.sale.purchaseId);
-const cashRow = sql(container, `SELECT c.usuario_id,c.empleado_id,c.canal,c.estado,c.total,p.medio,p.estado,
+const cashRow = sql(container, `SELECT COALESCE(c.usuario_id,0),c.empleado_id,c.canal,c.estado,c.total,p.medio,p.estado,
   (SELECT COUNT(*) FROM pasaje t WHERE t.compra_id=c.id AND t.estado='EMITIDO'),
   (SELECT COUNT(*) FROM factura f WHERE f.compra_id=c.id),
   (SELECT COUNT(*) FROM notificacion n WHERE n.compra_id=c.id AND n.tipo='CONFIRMACION' AND n.canal='EMAIL'
@@ -54,7 +54,7 @@ const cashRow = sql(container, `SELECT c.usuario_id,c.empleado_id,c.canal,c.esta
   FROM compra c JOIN pago p ON p.compra_id=c.id WHERE c.id=${cashPurchaseId};`)[0] || [];
 const employeeId = sql(container, `SELECT id FROM usuario WHERE email='${employeeEmail.replaceAll("'", "''")}';`)[0]?.[0];
 report.check('US12-02', 'Venta en efectivo confirma compra, emite pasaje/factura y asocia empleado sin cuenta',
-  cashRow[0] === '\\N' && cashRow[1] === employeeId && cashRow[2] === 'MOSTRADOR'
+  cashRow[0] === '0' && cashRow[1] === employeeId && cashRow[2] === 'MOSTRADOR'
     && cashRow[3] === 'CONFIRMADA' && cashRow[5] === 'EFECTIVO' && cashRow[6] === 'APROBADO'
     && Number(cashRow[7]) === 1 && Number(cashRow[8]) === 1 && Number(cashRow[9]) === 1,
   `compra=${cashRow[3]}, empleado=${cashRow[1]}, pasajes=${cashRow[7]}, facturas=${cashRow[8]}`);

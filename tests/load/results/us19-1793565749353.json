@@ -1,0 +1,236 @@
+{
+  "story": "US19",
+  "generatedAt": "2026-11-01T20:42:56.202Z",
+  "apiUrl": "http://localhost:8080",
+  "concurrency": 200,
+  "flightCode": "L99353",
+  "departureId": 600,
+  "date": "2026-11-03",
+  "searches": {
+    "total": 200,
+    "successful": 162,
+    "p95Ms": 2114.47,
+    "maxMs": "2148.43"
+  },
+  "purchases": {
+    "total": 200,
+    "successful": 0,
+    "p95Ms": 1155.97,
+    "maxMs": "1199.39"
+  },
+  "inventory": {
+    "soldOrReserved": 0,
+    "capacity": 220,
+    "pendingPurchases": 0,
+    "noOversell": true
+  },
+  "serverErrors": 38,
+  "failedRequests": 238,
+  "failures": [
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 500,
+      "detail": "Error al buscar opciones de viaje"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    },
+    {
+      "status": 401,
+      "detail": "Sesión inválida o expirada"
+    }
+  ],
+  "acceptance": {
+    "p95UnderThreeSeconds": true,
+    "allRequestsSuccessful": false,
+    "noOversell": true
+  }
+}
