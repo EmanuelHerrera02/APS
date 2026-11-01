@@ -25,4 +25,5 @@ export const Permissions = Object.freeze({
   ADMIN_VIEW_AUDIT: 'admin:view_audit',
   ADMIN_CONFIG: 'admin:config',
   FLIGHT_CREATE: 'flight:create',
+  FLIGHT_EDIT: 'flight:edit',
 });

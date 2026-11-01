@@ -495,6 +495,17 @@ export default function PassengerDashboard() {
                 <strong>{purchase.code} · {purchase.flight}</strong>
                 <span>{purchase.origin} → {purchase.destination} · {formatTripDate(purchase.date)} · {purchase.status}</span>
               </div>
+              {purchase.notices?.map((notice, index) => (
+                <aside key={`${notice.type}-${notice.createdAt}-${index}`} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                  <strong>{notice.type === 'CAMBIO_HORARIO' ? 'Aviso: cambió el horario' : 'Aviso: salida cancelada'}</strong>
+                  {notice.type === 'CAMBIO_HORARIO' ? (
+                    <p>Horario anterior: salida {notice.previousDeparture || '—'}, llegada {notice.previousArrival || '—'}. Nuevo horario: salida {notice.departure || '—'}, llegada {notice.arrival || '—'}.</p>
+                  ) : (
+                    <p>Motivo: {notice.reason || 'No informado'}.</p>
+                  )}
+                  <span className="text-xs">Estado del aviso por email: {notice.status?.toLowerCase() || 'pendiente'}</span>
+                </aside>
+              ))}
               {purchase.status === 'CONFIRMADA' ? (
                 <div className="trip-document-actions">
                   {purchase.invoiceAvailable && <button type="button" onClick={() => downloadDocument(`/passenger/reservations/${purchase.id}/documents/invoice`, `factura-compra-${purchase.id}.pdf`)}>Descargar factura</button>}

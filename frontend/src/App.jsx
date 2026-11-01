@@ -9,8 +9,12 @@ import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import AdminFlightsPage from './pages/AdminFlightsPage';
+import AdminFlightManagementPage from './pages/AdminFlightManagementPage';
 import AdminFlightTestPage from './pages/AdminFlightTestPage';
 import ProfilePage from './pages/ProfilePage';
+import EmployeeSalesPage from './pages/EmployeeSalesPage';
+import EmployeePurchasesPage from './pages/EmployeePurchasesPage';
+import AdminOccupancyReportsPage from './pages/AdminOccupancyReportsPage';
 
 function HomeRedirect() {
   const { roles, isAuthenticated } = useAuth();
@@ -20,11 +24,11 @@ function HomeRedirect() {
   return <Navigate to="/passenger" replace />;
 }
 
-function ProtectedRoute({ permission, children }) {
-  const { loading, isAuthenticated, hasPermission } = useAuth();
+function ProtectedRoute({ permission, role, children }) {
+  const { loading, isAuthenticated, hasPermission, roles } = useAuth();
   if (loading) return <main role="status">Cargando sesión…</main>;
   if (!isAuthenticated) return <Navigate to="/login" replace />;
-  if (permission && !hasPermission(permission)) return <Navigate to="/forbidden" replace />;
+  if ((permission && !hasPermission(permission)) || (role && !roles.some((entry) => entry.name === role))) return <Navigate to="/forbidden" replace />;
   return children;
 }
 
@@ -47,10 +51,14 @@ export default function App() {
       <Route path="/admin/dashboard" element={<ProtectedRoute permission={Permissions.ADMIN_PANEL_ACCESS}><AdminDashboard /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute permission={Permissions.USER_LIST}><AdminUsersPage /></ProtectedRoute>} />
       <Route path="/admin/flights/new" element={<ProtectedRoute permission={Permissions.FLIGHT_CREATE}><AdminFlightsPage /></ProtectedRoute>} />
+      <Route path="/admin/flights" element={<ProtectedRoute permission={Permissions.FLIGHT_EDIT}><AdminFlightManagementPage /></ProtectedRoute>} />
       <Route path="/admin/flights/test" element={<ProtectedRoute permission={Permissions.FLIGHT_CREATE}><AdminFlightTestPage /></ProtectedRoute>} />
+      <Route path="/admin/occupancy" element={<ProtectedRoute role={Roles.ADMIN} permission={Permissions.REPORT_VIEW_FINANCIAL}><AdminOccupancyReportsPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute permission={Permissions.PROFILE_VIEW_OWN}><ProfilePage /></ProtectedRoute>} />
       <Route path="/employee" element={<ProtectedRoute permission={Permissions.REPORT_VIEW_OPERATIONAL}><EmployeeDashboard /></ProtectedRoute>} />
       <Route path="/employee/reports" element={<ProtectedRoute permission={Permissions.REPORT_VIEW_OPERATIONAL}><EmployeeDashboard /></ProtectedRoute>} />
+      <Route path="/employee/sales" element={<ProtectedRoute permission={Permissions.PAYMENT_PROCESS}><EmployeeSalesPage /></ProtectedRoute>} />
+      <Route path="/employee/purchases" element={<ProtectedRoute permission={Permissions.RESERVATION_VIEW_ALL}><EmployeePurchasesPage /></ProtectedRoute>} />
       <Route path="/passenger" element={<ProtectedRoute permission={Permissions.AUTH_LOGIN}><PassengerDashboard /></ProtectedRoute>} />
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

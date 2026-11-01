@@ -162,16 +162,22 @@ object UserRepository {
     } finally conn.close()
   }
 
-  def updateUser(actorId: Long, userId: Long, firstName: Option[String], lastName: Option[String], phone: Option[String],
-                 active: Option[Boolean], role: Option[String]): Boolean = {
+  def updateUser(actorId: Long, userId: Long, email: Option[String], password: Option[String], firstName: Option[String],
+                 lastName: Option[String], phone: Option[String], active: Option[Boolean], role: Option[String]): Boolean = {
     val normalizedRole = role.map(_.trim.toUpperCase(Locale.ROOT))
+    val normalizedEmail = email.map(_.trim.toLowerCase(Locale.ROOT))
     if (normalizedRole.exists(value => !Set(Roles.ADMIN, Roles.EMPLOYEE, Roles.PASSENGER).contains(value)))
       throw new IllegalArgumentException("El rol indicado no es válido")
+    if (normalizedEmail.exists(value => !value.matches("(?i)^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$") || value.length > 255))
+      throw new IllegalArgumentException("El email no es válido")
+    if (password.exists(value => value.length < 8 || value.length > 256))
+      throw new IllegalArgumentException("La contraseña debe tener entre 8 y 256 caracteres")
     if (firstName.exists(value => value.trim.isEmpty || value.trim.length > 100) ||
         lastName.exists(value => value.trim.isEmpty || value.trim.length > 100) ||
         phone.exists(_.length > 30)) throw new IllegalArgumentException("Revisá nombre, apellido y teléfono")
 
     val fields = List(
+      normalizedEmail.map(_ => "email=?"), password.map(_ => "password_hash=?"),
       firstName.map(_ => "nombre=?"), lastName.map(_ => "apellido=?"), phone.map(_ => "telefono=?"),
       active.map(_ => "activo=?"), normalizedRole.map(_ => "rol=?")
     ).flatten
@@ -193,6 +199,8 @@ object UserRepository {
         if (!exists) { conn.commit(); return false }
         val stmt = conn.prepareStatement(s"UPDATE usuario SET ${fields.mkString(", ")} WHERE id=?")
         var index = 1
+        normalizedEmail.foreach { value => stmt.setString(index, value); index += 1 }
+        password.foreach { value => stmt.setString(index, passwordHash(value)); index += 1 }
         firstName.foreach { value => stmt.setString(index, value.trim); index += 1 }
         lastName.foreach { value => stmt.setString(index, value.trim); index += 1 }
         phone.foreach { value => stmt.setString(index, value.trim); index += 1 }
@@ -201,11 +209,22 @@ object UserRepository {
         stmt.setLong(index, userId)
         val changed = stmt.executeUpdate()
         stmt.close()
-        if (changed > 0) writeAudit(conn, Some(actorId), "user.updated", "usuario", Some(userId), None)
+        if (active.contains(false)) {
+          val revoke = conn.prepareStatement(
+            "UPDATE sesion_usuario SET revocada_en=UTC_TIMESTAMP() WHERE usuario_id=? AND revocada_en IS NULL")
+          try { revoke.setLong(1, userId); revoke.executeUpdate() } finally revoke.close()
+        }
+        if (changed > 0) {
+          writeAudit(conn, Some(actorId), "user.updated", "usuario", Some(userId), None)
+        }
         conn.commit()
         true
       }
-    } catch { case ex: Throwable => conn.rollback(); throw ex }
+    } catch {
+      case ex: SQLException if ex.getErrorCode == 1062 =>
+        conn.rollback(); throw new IllegalArgumentException("Ya existe una cuenta con ese email")
+      case ex: Throwable => conn.rollback(); throw ex
+    }
     finally conn.close()
   }
 

@@ -58,6 +58,30 @@ object PassengerDocumentService {
           tickets += Map("id" -> ticketId, "available" -> available)
         } finally { ticketRs.close(); ticketStmt.close() }
 
+        val noticeStmt = connection.prepareStatement(
+          """SELECT tipo, estado, created_at,
+            |       JSON_UNQUOTE(JSON_EXTRACT(payload, '$.hora_partida_anterior')) AS hora_partida_anterior,
+            |       JSON_UNQUOTE(JSON_EXTRACT(payload, '$.hora_llegada_anterior')) AS hora_llegada_anterior,
+            |       JSON_UNQUOTE(JSON_EXTRACT(payload, '$.hora_partida')) AS hora_partida,
+            |       JSON_UNQUOTE(JSON_EXTRACT(payload, '$.hora_llegada')) AS hora_llegada,
+            |       JSON_UNQUOTE(JSON_EXTRACT(payload, '$.motivo')) AS motivo
+            |FROM notificacion
+            |WHERE compra_id=? AND canal='EMAIL' AND tipo IN ('CAMBIO_HORARIO','CANCELACION')
+            |ORDER BY created_at DESC, id DESC""".stripMargin)
+        noticeStmt.setLong(1, id)
+        val noticeRs = noticeStmt.executeQuery()
+        val notices = scala.collection.mutable.ListBuffer.empty[Map[String, Any]]
+        try while (noticeRs.next()) notices += Map(
+          "type" -> noticeRs.getString("tipo"),
+          "status" -> noticeRs.getString("estado"),
+          "createdAt" -> noticeRs.getTimestamp("created_at").toLocalDateTime.toString,
+          "previousDeparture" -> Option(noticeRs.getString("hora_partida_anterior")).orNull,
+          "previousArrival" -> Option(noticeRs.getString("hora_llegada_anterior")).orNull,
+          "departure" -> Option(noticeRs.getString("hora_partida")).orNull,
+          "arrival" -> Option(noticeRs.getString("hora_llegada")).orNull,
+          "reason" -> Option(noticeRs.getString("motivo")).orNull
+        ) finally { noticeRs.close(); noticeStmt.close() }
+
         purchases += Map(
           "id" -> id, "code" -> rs.getString("codigo"), "status" -> rs.getString("estado"),
           "createdAt" -> rs.getTimestamp("created_at").toLocalDateTime.toString,
@@ -65,7 +89,8 @@ object PassengerDocumentService {
           "origin" -> rs.getString("origen"), "destination" -> rs.getString("destino"),
           "total" -> rs.getBigDecimal("total"),
           "secondsToExpire" -> (if (rs.getString("estado") == "PENDIENTE_PAGO") rs.getLong("segundos_restantes") else 0L),
-          "invoiceAvailable" -> (confirmed && invoicePath.nonEmpty), "tickets" -> tickets.toList)
+          "invoiceAvailable" -> (confirmed && invoicePath.nonEmpty), "tickets" -> tickets.toList,
+          "notices" -> notices.toList)
       } finally { rs.close(); query.close() }
       purchases.toList
     } finally connection.close()

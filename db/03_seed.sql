@@ -33,7 +33,8 @@ INSERT INTO permiso (codigo, descripcion) VALUES
   ('report:view_financial', 'Ver reportes financieros'),
   ('admin:view_audit', 'Ver auditoría'),
   ('admin:config', 'Configurar el sistema'),
-  ('flight:create', 'Crear vuelos');
+  ('flight:create', 'Crear vuelos'),
+  ('flight:edit', 'Modificar y cancelar vuelos');
 
 INSERT INTO rol_permiso (rol, permiso_codigo) VALUES
   ('ADMIN', 'auth:login'),
@@ -47,6 +48,7 @@ INSERT INTO rol_permiso (rol, permiso_codigo) VALUES
   ('ADMIN', 'admin:view_audit'),
   ('ADMIN', 'admin:config'),
   ('ADMIN', 'flight:create'),
+  ('ADMIN', 'flight:edit'),
   ('MOSTRADOR', 'auth:login'),
   ('MOSTRADOR', 'profile:view_own'),
   ('MOSTRADOR', 'reservation:view_all'),
@@ -159,7 +161,7 @@ SET @s_mdz_3  = (SELECT id FROM salida WHERE vuelo_id = @v_mdz AND fecha >= CURD
 SET @s_mdz_15 = (SELECT id FROM salida WHERE vuelo_id = @v_mdz AND fecha >= CURDATE() + INTERVAL 15 DAY ORDER BY fecha LIMIT 1);
 
 -- -----------------------------------------------------------------------------
--- C1: Juan compra por web 3 Economy a Bariloche (él + 2 acompañantes). CONFIRMADA + factura B.
+-- C1: Juan compra por web 3 Economy a Bariloche (él + 2 acompañantes). CONFIRMADA + factura.
 -- -----------------------------------------------------------------------------
 CALL crear_compra(@s_brc_10, @juan, NULL, 'WEB', 'juan.perez@gmail.com',
   '[{"nombre":"Juan","apellido":"Pérez","tipo_documento":"DNI","numero_documento":"30123456","clase":"ECONOMY"},
@@ -168,12 +170,11 @@ CALL crear_compra(@s_brc_10, @juan, NULL, 'WEB', 'juan.perez@gmail.com',
   @c1);
 SET @c1_total = (SELECT total FROM compra WHERE id = @c1);
 CALL registrar_pago(@c1, @c1_total, 'TARJETA_CREDITO', 'APROBADO', 'MP-7790012345', 'VISA', '4242', @p1, @r1);
-INSERT INTO factura (compra_id, numero, tipo, total, receptor_nombre, ruta_pdf)
-VALUES (@c1, 'B-0001-00000001', 'B', @c1_total, 'Juan Pérez',
-        CONCAT('facturas/', YEAR(CURDATE()), '/B-0001-00000001.pdf'));
+UPDATE factura SET ruta_pdf = CONCAT('facturas/', YEAR(CURDATE()), '/', numero, '.pdf')
+ WHERE compra_id = @c1;
 
 -- -----------------------------------------------------------------------------
--- C2: venta de mostrador (sin cuenta) de 2 Primera a Córdoba, pago en efectivo. Factura A a empresa.
+-- C2: venta de mostrador (sin cuenta) de 2 Primera a Córdoba, pago en efectivo.
 -- -----------------------------------------------------------------------------
 CALL crear_compra(@s_cor_5, NULL, @diego, 'MOSTRADOR', 'viajes@agroandina.com.ar',
   '[{"nombre":"Roberto","apellido":"Salas","tipo_documento":"DNI","numero_documento":"22333444","clase":"PRIMERA"},
@@ -181,9 +182,8 @@ CALL crear_compra(@s_cor_5, NULL, @diego, 'MOSTRADOR', 'viajes@agroandina.com.ar
   @c2);
 SET @c2_total = (SELECT total FROM compra WHERE id = @c2);
 CALL registrar_pago(@c2, @c2_total, 'EFECTIVO', 'APROBADO', NULL, NULL, NULL, @p2, @r2);
-INSERT INTO factura (compra_id, numero, tipo, total, receptor_nombre, receptor_cuit, ruta_pdf)
-VALUES (@c2, 'A-0001-00000001', 'A', @c2_total, 'Agro Andina S.A.', '30712345679',
-        CONCAT('facturas/', YEAR(CURDATE()), '/A-0001-00000001.pdf'));
+UPDATE factura SET ruta_pdf = CONCAT('facturas/', YEAR(CURDATE()), '/', numero, '.pdf')
+ WHERE compra_id = @c2;
 
 -- -----------------------------------------------------------------------------
 -- C3: María desde la app, 1 Economy + 1 Primera a Ushuaia. Queda PENDIENTE_PAGO
@@ -224,9 +224,8 @@ CALL crear_compra(@s_cor_12, @maria, NULL, 'MOVIL', 'maria.gonzalez@hotmail.com'
   @c6);
 SET @c6_total = (SELECT total FROM compra WHERE id = @c6);
 CALL registrar_pago(@c6, @c6_total, 'TARJETA_CREDITO', 'APROBADO', 'MP-7790023456', 'MASTERCARD', '5454', @p6, @r6);
-INSERT INTO factura (compra_id, numero, tipo, total, receptor_nombre, ruta_pdf)
-VALUES (@c6, 'B-0001-00000002', 'B', @c6_total, 'María González',
-        CONCAT('facturas/', YEAR(CURDATE()), '/B-0001-00000002.pdf'));
+UPDATE factura SET ruta_pdf = CONCAT('facturas/', YEAR(CURDATE()), '/', numero, '.pdf')
+ WHERE compra_id = @c6;
 UPDATE salida SET hora_partida = '08:15', hora_llegada = '09:35' WHERE id = @s_cor_12;
 
 -- -----------------------------------------------------------------------------
@@ -238,9 +237,8 @@ CALL crear_compra(@s_mdz_15, @lucia, NULL, 'WEB', 'lucia.romero@yahoo.com.ar',
   @c7);
 SET @c7_total = (SELECT total FROM compra WHERE id = @c7);
 CALL registrar_pago(@c7, @c7_total, 'TARJETA_CREDITO', 'APROBADO', 'MP-7790034567', 'AMEX', '1005', @p7, @r7);
-INSERT INTO factura (compra_id, numero, tipo, total, receptor_nombre, ruta_pdf)
-VALUES (@c7, 'B-0001-00000003', 'B', @c7_total, 'Lucía Romero',
-        CONCAT('facturas/', YEAR(CURDATE()), '/B-0001-00000003.pdf'));
+UPDATE factura SET ruta_pdf = CONCAT('facturas/', YEAR(CURDATE()), '/', numero, '.pdf')
+ WHERE compra_id = @c7;
 UPDATE salida SET estado = 'CANCELADA', motivo_cancelacion = 'Condiciones meteorológicas adversas'
  WHERE id = @s_mdz_15;
 

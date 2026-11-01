@@ -2,12 +2,14 @@ package com.transport.system.controllers
 
 import com.transport.system.middleware.AuthorizedAction
 import com.transport.system.models.{AdminCreateFlightRequest, AdminCreateUserRequest, AdminUserUpdateRequest, Roles, Permissions}
-import com.transport.system.security.{FlightRepository, FlightWriteError, UserRepository, UserWriteError}
+import com.transport.system.security.{FlightRepository, FlightWriteError, OccupancyReportRepository, UserRepository, UserWriteError}
 import org.json4s._
 import org.json4s.native.JsonMethods._
 import org.scalatra._
 import org.scalatra.json._
 import org.slf4j.LoggerFactory
+import java.time.LocalDate
+import scala.util.Try
 
 /**
  * Controlador para funcionalidades de Administrador
@@ -15,6 +17,93 @@ import org.slf4j.LoggerFactory
 class AdminController extends ScalatraServlet with JacksonJsonSupport with AuthorizedAction {
   protected implicit val jsonFormats: Formats = DefaultFormats
   val logger = LoggerFactory.getLogger(getClass)
+
+  private def occupancyFilters(): Either[String, (Option[String], Option[String], LocalDate, LocalDate)] = {
+    val from = params.get("dateFrom").flatMap(value => Try(LocalDate.parse(value)).toOption)
+      .toRight("dateFrom es obligatorio y debe tener formato AAAA-MM-DD")
+    val to = params.get("dateTo").flatMap(value => Try(LocalDate.parse(value)).toOption)
+      .toRight("dateTo es obligatorio y debe tener formato AAAA-MM-DD")
+    val flight = params.get("flightCode").map(_.trim.toUpperCase(java.util.Locale.ROOT)).filter(_.nonEmpty)
+    val fare = params.get("class").map(_.trim.toUpperCase(java.util.Locale.ROOT)).filter(_.nonEmpty)
+    for {
+      start <- from
+      end <- to
+      _ <- Either.cond(!end.isBefore(start), (), "dateTo debe ser igual o posterior a dateFrom")
+      _ <- Either.cond(flight.forall(_.matches("^[A-Z0-9]{2}[0-9]{1,4}$")), (), "flightCode no tiene un formato válido")
+      _ <- Either.cond(fare.forall(Set("ECONOMY", "PRIMERA")), (), "class debe ser ECONOMY o PRIMERA")
+    } yield (flight, fare, start, end)
+  }
+
+  private def csvCell(value: Any): String = s"\"${Option(value).map(_.toString).getOrElse("").replace("\"", "\"\"")}\""
+
+  private def occupancyCsv(rows: List[Map[String, Any]]): String = {
+    val header = List("Vuelo", "Origen", "Destino", "Salida ID", "Fecha", "Estado", "Clase", "Capacidad",
+      "Pasajes vendidos", "Reservas pendientes", "Asientos disponibles", "Ocupación (%)", "Recaudado")
+    val body = rows.map { row =>
+      List("flightCode", "origin", "destination", "departureId", "date", "departureStatus", "class", "capacity",
+        "sold", "reserved", "available", "occupancyPercent", "revenue").map(key => csvCell(row.getOrElse(key, ""))).mkString(",")
+    }
+    "\uFEFF" + (header.map(csvCell).mkString(",") :: body).mkString("\r\n")
+  }
+
+  private def streamCsv(content: String): Unit = {
+    val bytes = content.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+    response.setStatus(200)
+    response.setContentType("text/csv; charset=utf-8")
+    response.setHeader("Content-Disposition", "attachment; filename=ocupacion.csv")
+    response.setHeader("Cache-Control", "private, no-store")
+    response.setContentLength(bytes.length)
+    response.getOutputStream.write(bytes)
+    response.flushBuffer()
+  }
+
+  private def adminOccupancyAccess(userId: Int): Boolean =
+    hasRole(request, Roles.ADMIN) && hasPermission(request, Permissions.REPORT_VIEW_FINANCIAL)
+
+  /** GET /admin/occupancy — ocupación por vuelo, clase y fechas. */
+  get("/occupancy") {
+    val userId = getUserIdFromRequest(request)
+    if (!adminOccupancyAccess(userId)) {
+      logAccessDenied(userId, "view_occupancy_report", "Requires ADMIN role and report:view_financial")
+      Forbidden(Map("error" -> "Solo administradores pueden consultar la ocupación"))
+    } else occupancyFilters() match {
+      case Left(error) => BadRequest(Map("error" -> error))
+      case Right((flight, fare, from, to)) => try {
+        Ok(Map("rows" -> OccupancyReportRepository.query(flight, fare, from, to),
+          "filters" -> Map("flightCode" -> flight.orNull, "class" -> fare.orNull,
+            "dateFrom" -> from.toString, "dateTo" -> to.toString)))
+      } catch {
+        case ex: IllegalStateException =>
+          logger.error("Occupancy report database configuration is missing", ex)
+          ServiceUnavailable(Map("error" -> "El servicio de reportes no está configurado"))
+        case ex: Exception =>
+          logger.error(s"Occupancy report failed for admin=$userId", ex)
+          InternalServerError(Map("error" -> "No se pudo generar el reporte de ocupación"))
+      }
+    }
+  }
+
+  /** GET /admin/occupancy.csv — descarga CSV con los mismos filtros que la consulta. */
+  get("/occupancy.csv") {
+    val userId = getUserIdFromRequest(request)
+    if (!adminOccupancyAccess(userId)) {
+      logAccessDenied(userId, "export_occupancy_report", "Requires ADMIN role and report:view_financial")
+      Forbidden(Map("error" -> "Solo administradores pueden exportar la ocupación"))
+    } else occupancyFilters() match {
+      case Left(error) => BadRequest(Map("error" -> error))
+      case Right((flight, fare, from, to)) => try {
+        val rows = OccupancyReportRepository.query(flight, fare, from, to)
+        streamCsv(occupancyCsv(rows))
+      } catch {
+        case ex: IllegalStateException =>
+          logger.error("Occupancy CSV database configuration is missing", ex)
+          ServiceUnavailable(Map("error" -> "El servicio de reportes no está configurado"))
+        case ex: Exception =>
+          logger.error(s"Occupancy CSV failed for admin=$userId", ex)
+          InternalServerError(Map("error" -> "No se pudo exportar el reporte de ocupación"))
+      }
+    }
+  }
 
   /** GET /admin/airports — aeropuertos disponibles para el formulario de vuelos. */
   get("/airports") {
@@ -43,12 +132,104 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
         case Left(FlightWriteError.InvalidData(message)) => BadRequest(Map("error" -> message))
         case Left(FlightWriteError.CodeAlreadyExists) => Conflict(Map("error" -> "Ya existe un vuelo con ese código"))
         case Left(FlightWriteError.InvalidAirport) => BadRequest(Map("error" -> "El aeropuerto indicado no existe o no está disponible"))
+        case Left(_) => InternalServerError(Map("error" -> "No se pudo crear el vuelo"))
       }
     } catch {
       case _: MappingException => BadRequest(Map("error" -> "El cuerpo de la solicitud no es válido"))
       case ex: Exception =>
         logger.error("Error creating flight", ex)
         InternalServerError(Map("error" -> "No se pudo crear el vuelo"))
+    }
+  }
+
+  /** GET /admin/flights — vuelos y configuración editable para administración. */
+  get("/flights") {
+    val userId = getUserIdFromRequest(request)
+    if (!hasPermission(request, Permissions.FLIGHT_EDIT)) {
+      logAccessDenied(userId, "list_flights", s"Missing permission: ${Permissions.FLIGHT_EDIT}")
+      Forbidden(Map("error" -> "No tienes permiso para administrar vuelos"))
+    } else try Ok(Map("flights" -> FlightRepository.listForAdministration()))
+    catch {
+      case ex: Exception =>
+        logger.error("Error listing flights for administration", ex)
+        InternalServerError(Map("error" -> "No se pudieron cargar los vuelos"))
+    }
+  }
+
+  /** GET /admin/flights/:id — configuración de un vuelo para edición. */
+  get("/flights/:id") {
+    val userId = getUserIdFromRequest(request)
+    if (!hasPermission(request, Permissions.FLIGHT_EDIT)) {
+      logAccessDenied(userId, "view_flight", s"Missing permission: ${Permissions.FLIGHT_EDIT}")
+      Forbidden(Map("error" -> "No tienes permiso para administrar vuelos"))
+    } else params("id").toLongOption.filter(_ > 0) match {
+      case None => BadRequest(Map("error" -> "El id del vuelo no es válido"))
+      case Some(id) => FlightRepository.getForAdministration(id) match {
+        case Some(flight) => Ok(Map("flight" -> flight))
+        case None => NotFound(Map("error" -> "No existe el vuelo indicado"))
+      }
+    }
+  }
+
+  /** PUT /admin/flights/:id — actualiza horarios, calendario, capacidad y precios. */
+  put("/flights/:id") {
+    val userId = getUserIdFromRequest(request)
+    if (!hasPermission(request, Permissions.FLIGHT_EDIT)) {
+      logAccessDenied(userId, "update_flight", s"Missing permission: ${Permissions.FLIGHT_EDIT}")
+      Forbidden(Map("error" -> "No tienes permiso para administrar vuelos"))
+    } else params("id").toLongOption.filter(_ > 0) match {
+      case None => BadRequest(Map("error" -> "El id del vuelo no es válido"))
+      case Some(id) => try {
+        val input = AdminCreateFlightRequest.fromJson(parsedBody)
+        FlightRepository.update(userId.toLong, id, input) match {
+          case Right(_) => Ok(Map("message" -> "Vuelo actualizado", "flightId" -> id))
+          case Left(FlightWriteError.NotFound) => NotFound(Map("error" -> "No existe el vuelo indicado"))
+          case Left(FlightWriteError.AlreadyCancelled) => Conflict(Map("error" -> "El vuelo ya está cancelado"))
+          case Left(FlightWriteError.InvalidAirport) => BadRequest(Map("error" -> "El aeropuerto no está disponible"))
+          case Left(FlightWriteError.CodeAlreadyExists) => Conflict(Map("error" -> "Ya existe un vuelo con ese código"))
+          case Left(FlightWriteError.InvalidData(message)) => Conflict(Map("error" -> message))
+        }
+      } catch {
+        case _: MappingException => BadRequest(Map("error" -> "El cuerpo de la solicitud no es válido"))
+        case ex: Exception =>
+          logger.error(s"Error updating flight $id", ex)
+          InternalServerError(Map("error" -> "No se pudo actualizar el vuelo"))
+      }
+    }
+  }
+
+  /** POST /admin/flights/:id/cancel — cancela todas las salidas futuras del vuelo. */
+  post("/flights/:id/cancel") {
+    cancelFlight(departureId = None)
+  }
+
+  /** POST /admin/flights/:id/departures/:departureId/cancel — cancelación puntual. */
+  post("/flights/:id/departures/:departureId/cancel") {
+    params("departureId").toLongOption.filter(_ > 0) match {
+      case None => BadRequest(Map("error" -> "El id de la salida no es válido"))
+      case Some(departureId) => cancelFlight(Some(departureId))
+    }
+  }
+
+  private def cancelFlight(departureId: Option[Long]): ActionResult = {
+    val userId = getUserIdFromRequest(request)
+    if (!hasPermission(request, Permissions.FLIGHT_EDIT)) {
+      logAccessDenied(userId, "cancel_flight", s"Missing permission: ${Permissions.FLIGHT_EDIT}")
+      Forbidden(Map("error" -> "No tienes permiso para administrar vuelos"))
+    } else params("id").toLongOption.filter(_ > 0) match {
+      case None => BadRequest(Map("error" -> "El id del vuelo no es válido"))
+      case Some(flightId) =>
+        val reason = parsedBody \ "reason" match {
+          case JString(value) => value
+          case _ => ""
+        }
+        FlightRepository.cancel(userId.toLong, flightId, departureId, reason) match {
+          case Right(_) => Ok(Map("message" -> "Cancelación registrada", "flightId" -> flightId))
+          case Left(FlightWriteError.NotFound) => NotFound(Map("error" -> "No existe el vuelo indicado"))
+          case Left(FlightWriteError.AlreadyCancelled) => Conflict(Map("error" -> "El vuelo ya está cancelado"))
+          case Left(FlightWriteError.InvalidData(message)) => Conflict(Map("error" -> message))
+          case Left(_) => Conflict(Map("error" -> "No se pudo cancelar el vuelo"))
+        }
     }
   }
 
@@ -155,14 +336,16 @@ class AdminController extends ScalatraServlet with JacksonJsonSupport with Autho
           Forbidden(Map("error" -> "No tienes permiso para cambiar roles"))
         } else if (targetUserId == userId && (input.active.contains(false) || input.role.exists(role => !role.equalsIgnoreCase(Roles.ADMIN)))) {
           BadRequest(Map("error" -> "No podés desactivar tu cuenta ni quitarte el rol de administrador"))
-        } else if (UserRepository.updateUser(userId.toLong, targetUserId, input.firstName, input.lastName, input.phone,
-          input.active, input.role)) {
+        } else if (UserRepository.updateUser(userId.toLong, targetUserId, input.email, input.password, input.firstName,
+          input.lastName, input.phone, input.active, input.role)) {
           Ok(Map("message" -> "Usuario actualizado", "userId" -> targetUserId))
         } else NotFound(Map("error" -> "No existe el usuario indicado"))
       }
     } catch {
       case _: MappingException => BadRequest(Map("error" -> "El cuerpo de la solicitud no es válido"))
       case _: NumberFormatException => BadRequest(Map("error" -> "El id de usuario no es válido"))
+      case ex: IllegalArgumentException if ex.getMessage == "Ya existe una cuenta con ese email" =>
+        Conflict(Map("error" -> ex.getMessage))
       case ex: IllegalArgumentException => BadRequest(Map("error" -> ex.getMessage))
       case ex: Exception =>
         logger.error("Error editing user", ex)

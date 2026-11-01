@@ -61,6 +61,8 @@ export default function MainLayout({ children }) {
         icon: '⚙️',
         permission: Permissions.RESERVATION_VIEW_ALL,
         submenu: [
+          { label: 'Vender pasajes', path: '/employee/sales', permission: Permissions.PAYMENT_PROCESS },
+          { label: 'Consultar compras', path: '/employee/purchases', permission: Permissions.RESERVATION_VIEW_ALL },
           { label: 'Todas las reservas', path: '/employee/reservations', permission: Permissions.RESERVATION_VIEW_ALL },
           { label: 'Procesar pagos', path: '/employee/payments', permission: Permissions.PAYMENT_PROCESS },
           { label: 'Reportes', path: '/employee/reports', permission: Permissions.REPORT_VIEW_OPERATIONAL },
@@ -79,7 +81,9 @@ export default function MainLayout({ children }) {
           { label: 'Panel de Control', path: '/admin/dashboard', permission: Permissions.ADMIN_PANEL_ACCESS },
           { label: 'Gestionar Usuarios', path: '/admin/users', permission: Permissions.USER_LIST },
           { label: 'Alta de vuelo', path: '/admin/flights/new', permission: Permissions.FLIGHT_CREATE },
+          { label: 'Administrar vuelos', path: '/admin/flights', permission: Permissions.FLIGHT_EDIT },
           { label: 'Pruebas de alta', path: '/admin/flights/test', permission: Permissions.FLIGHT_CREATE },
+          { label: 'Reportes de ocupación', path: '/admin/occupancy', permission: Permissions.REPORT_VIEW_FINANCIAL },
           { label: 'Reportes Financieros', path: '/admin/reports', permission: Permissions.REPORT_VIEW_FINANCIAL },
           { label: 'Auditoría', path: '/admin/audit', permission: Permissions.ADMIN_VIEW_AUDIT },
         ],

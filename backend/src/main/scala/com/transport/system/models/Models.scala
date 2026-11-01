@@ -98,6 +98,8 @@ case class AdminCreateUserRequest(
 )
 
 case class AdminUserUpdateRequest(
+  email: Option[String] = None,
+  password: Option[String] = None,
   firstName: Option[String] = None,
   lastName: Option[String] = None,
   phone: Option[String] = None,
@@ -120,6 +122,8 @@ object AdminUserUpdateRequest {
       case _ => throw new MappingException(s"$field debe ser un texto")
     }
     AdminUserUpdateRequest(
+      email = text("email"),
+      password = text("password"),
       firstName = text("firstName"),
       lastName = text("lastName"),
       phone = text("phone"),
@@ -245,6 +249,7 @@ object Permissions {
   val ADMIN_VIEW_AUDIT = "admin:view_audit"
   val ADMIN_CONFIG = "admin:config"
   val FLIGHT_CREATE = "flight:create"
+  val FLIGHT_EDIT = "flight:edit"
 }
 
 /**
@@ -267,7 +272,8 @@ case class Administrador(user: User) extends UserProfile {
     Permissions.REPORT_VIEW_FINANCIAL,
     Permissions.ADMIN_VIEW_AUDIT,
     Permissions.ADMIN_CONFIG,
-    Permissions.FLIGHT_CREATE
+    Permissions.FLIGHT_CREATE,
+    Permissions.FLIGHT_EDIT
   )
 }
 

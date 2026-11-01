@@ -14,7 +14,8 @@ import org.json4s._
 import org.json4s.native.JsonMethods._
 import org.slf4j.LoggerFactory
 
-private case class MailJob(id: Long, kind: String, recipient: String, purchaseId: Option[Long], attempts: Int)
+private case class MailJob(id: Long, kind: String, recipient: String, purchaseId: Option[Long],
+                           payload: Option[String], attempts: Int)
 private case class MailContent(subject: String, body: String, attachments: List[Path])
 
 private class PermanentMailFailure(message: String, cause: Throwable = null) extends RuntimeException(message, cause)
@@ -137,7 +138,36 @@ object EmailQueueWorker {
   }
 
   private def content(job: MailJob): Option[MailContent] = {
-    if (!Set("CONFIRMACION", "REENVIO").contains(job.kind) || job.purchaseId.isEmpty) {
+    if (Set("CAMBIO_HORARIO", "CANCELACION").contains(job.kind)) {
+      val details = job.payload.flatMap { value =>
+        try Some(parse(value)) catch { case _: Exception => None }
+      }
+      def field(name: String): String = details.map(value => value \ name).collect {
+        case JString(value) => value
+        case JInt(value) => value.toString
+      }.filter(_.trim.nonEmpty).getOrElse("No informado")
+      val flight = job.purchaseId.flatMap { purchaseId =>
+        val connection = db()
+        try {
+          val query = connection.prepareStatement(
+            "SELECT v.codigo FROM compra c JOIN salida s ON s.id=c.salida_id JOIN vuelo v ON v.id=s.vuelo_id WHERE c.id=?")
+          query.setLong(1, purchaseId)
+          val rs = query.executeQuery()
+          try if (rs.next()) Option(rs.getString(1)) else None
+          finally { rs.close(); query.close() }
+        } finally connection.close()
+      }.getOrElse("tu vuelo")
+      val body = if (job.kind == "CAMBIO_HORARIO")
+        s"El horario de $flight para ${field("fecha")} cambió.\n\n" +
+          s"Horario anterior: salida ${field("hora_partida_anterior")}, llegada ${field("hora_llegada_anterior")}.\n" +
+          s"Nuevo horario: salida ${field("hora_partida")}, llegada ${field("hora_llegada")}.\n\n" +
+          "Consultá los detalles actualizados en Tus viajes.\n\nAeroNet"
+      else
+        s"Se canceló $flight para ${field("fecha")}.\n\nMotivo: ${field("motivo")}\n\n" +
+          "Consultá el estado actualizado de tu compra en Tus viajes.\n\nAeroNet"
+      val subject = if (job.kind == "CAMBIO_HORARIO") s"Cambio de horario — $flight" else s"Vuelo cancelado — $flight"
+      Some(MailContent(subject, body, Nil))
+    } else if (!Set("CONFIRMACION", "REENVIO").contains(job.kind) || job.purchaseId.isEmpty) {
       Some(MailContent(s"Notificación AeroNet: ${job.kind.toLowerCase(java.util.Locale.ROOT)}",
         "Tenés una actualización de tu gestión con AeroNet. Consultá el portal para ver los detalles.", Nil))
     } else {
@@ -196,7 +226,7 @@ object EmailQueueWorker {
     try {
       connection.setAutoCommit(false)
       val query = connection.prepareStatement(
-        """SELECT id, tipo, destinatario, compra_id, intentos FROM notificacion
+        """SELECT id, tipo, destinatario, compra_id, payload, intentos FROM notificacion
           |WHERE canal='EMAIL' AND estado IN ('PENDIENTE','FALLIDA','PROCESANDO')
           |  AND intentos < ? AND programada_para <= NOW()
           |  AND (estado <> 'PROCESANDO' OR updated_at < DATE_SUB(NOW(), INTERVAL 2 MINUTE))
@@ -215,7 +245,7 @@ object EmailQueueWorker {
         val purchaseId = rs.getLong("compra_id")
         val optionalPurchase = if (rs.wasNull()) None else Some(purchaseId)
         jobs += MailJob(rs.getLong("id"), rs.getString("tipo"), rs.getString("destinatario"),
-          optionalPurchase, rs.getInt("intentos"))
+          optionalPurchase, Option(rs.getString("payload")), rs.getInt("intentos"))
       } finally { rs.close(); query.close() }
       jobs.foreach { job =>
         val update = connection.prepareStatement("UPDATE notificacion SET estado='PROCESANDO' WHERE id=?")
