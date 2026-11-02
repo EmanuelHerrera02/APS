@@ -13,6 +13,14 @@
 
 Las pruebas de carga desactivaron los workers de correo y documentos para medir el camino de búsqueda y reserva sin esos procesos de fondo. Las pruebas funcionales usaron un SMTP falso para validar notificaciones y reintentos, sin enviar correo real.
 
+### Correcciones posteriores a la revisión del 2026-11-02 (pendientes de ejecutar)
+
+- **US6:** un cambio de período o de días de operación que deja fuera salidas con pasajes emitidos ahora se rechaza con HTTP 409 (antes cancelaba esas salidas y dejaba las compras confirmadas sin vuelo). Nueva comprobación `US6-08`; la prueba pasa a tener 8 comprobaciones.
+- **US16:** la deshabilitación y la reactivación se auditan como `user.disabled` y `user.enabled`, separadas de `user.updated`, con los campos modificados en `detalles`. `US16-07` verifica los tres eventos.
+- **US19:** el escenario de carga agrega el inicio del pago a la compra web y una fase de 200 compras confirmadas en mostrador por 150 plazas, para probar la sobreventa con competencia real. Se debe ejecutar con los workers activos; ver [`../tests/load/README.md`](../tests/load/README.md).
+
+Los resultados de arriba corresponden a la versión anterior de las pruebas. Hay que volver a ejecutar US6, US16 y US19 antes de la demo.
+
 ## Preparación de la demo
 
 1. Iniciar una base aislada con el esquema y datos de prueba del repositorio (`db/01_schema.sql` a `db/03_seed.sql`) y aplicar las migraciones necesarias de Sprint 3 en orden: `db/migrations/20261101_us6_edicion_cancelacion_vuelos.sql` y `db/migrations/20261101_us15_notificaciones_cambios_cancelaciones.sql`.
@@ -22,7 +30,7 @@ Las pruebas de carga desactivaron los workers de correo y documentos para medir 
 
 ## Recorrido propuesto
 
-1. **Administración de vuelos (US6):** editar horario/precio; mostrar que el importe ya comprado no cambia y que la capacidad no puede quedar debajo de los pasajes vendidos. Cancelar una salida con motivo y observar el registro de auditoría.
+1. **Administración de vuelos (US6):** editar horario/precio; mostrar que el importe ya comprado no cambia, que la capacidad no puede quedar debajo de los pasajes vendidos y que no se puede achicar el período dejando afuera una salida con pasajes vendidos. Cancelar una salida con motivo y observar el registro de auditoría.
 2. **Avisos al pasajero (US15):** mostrar el correo de cambio con horario anterior/nuevo y el aviso de cancelación con motivo. Hacer notar que un cambio de precio no genera aviso.
 3. **Mostrador (US12 y US13):** buscar vuelos, vender en efectivo y con tarjeta de terminal, consultar una compra y reenviar pasajes/factura al correo elegido.
 4. **Reportes (US14):** filtrar por vuelo, clase y rango de fechas; contrastar capacidad, vendidos, reservas, disponibles, ocupación y recaudación; descargar CSV. Confirmar que un usuario de mostrador no accede.

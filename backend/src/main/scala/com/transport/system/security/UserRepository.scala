@@ -192,11 +192,11 @@ object UserRepository {
         conn.commit()
         found
       } else {
-        val check = conn.prepareStatement("SELECT 1 FROM usuario WHERE id=? FOR UPDATE")
+        val check = conn.prepareStatement("SELECT activo FROM usuario WHERE id=? FOR UPDATE")
         check.setLong(1, userId)
         val checkRs = check.executeQuery()
-        val exists = try checkRs.next() finally { checkRs.close(); check.close() }
-        if (!exists) { conn.commit(); return false }
+        val wasActive = try if (checkRs.next()) Some(checkRs.getBoolean(1)) else None finally { checkRs.close(); check.close() }
+        if (wasActive.isEmpty) { conn.commit(); return false }
         val stmt = conn.prepareStatement(s"UPDATE usuario SET ${fields.mkString(", ")} WHERE id=?")
         var index = 1
         normalizedEmail.foreach { value => stmt.setString(index, value); index += 1 }
@@ -215,7 +215,18 @@ object UserRepository {
           try { revoke.setLong(1, userId); revoke.executeUpdate() } finally revoke.close()
         }
         if (changed > 0) {
-          writeAudit(conn, Some(actorId), "user.updated", "usuario", Some(userId), None)
+          // La baja y la reactivación se auditan con su propia acción para distinguirlas de una edición.
+          val action = active match {
+            case Some(false) if wasActive.contains(true) => "user.disabled"
+            case Some(true) if wasActive.contains(false) => "user.enabled"
+            case _ => "user.updated"
+          }
+          val changedFields = List(normalizedEmail.map(_ => "email"), password.map(_ => "password"),
+            firstName.map(_ => "nombre"), lastName.map(_ => "apellido"), phone.map(_ => "telefono"),
+            active.map(_ => "activo"), normalizedRole.map(_ => "rol")).flatten
+          val details = s"{\"campos\":[${changedFields.map(field => s"\"$field\"").mkString(",")}]" +
+            normalizedRole.map(value => s",\"rol\":\"$value\"").getOrElse("") + "}"
+          writeAudit(conn, Some(actorId), action, "usuario", Some(userId), Some(details))
         }
         conn.commit()
         true

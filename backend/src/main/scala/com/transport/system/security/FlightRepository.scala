@@ -314,6 +314,32 @@ object FlightRepository {
         insertDay.executeBatch()
       } finally insertDay.close()
 
+      // Las salidas que quedan fuera del nuevo calendario se cancelan, salvo que tengan pasajes emitidos:
+      // en ese caso se rechaza el cambio para no dejar sin lugar a pasajeros que ya pagaron.
+      val soldOutsideCalendar = conn.prepareStatement(
+        """SELECT s.fecha FROM salida s
+          |WHERE s.vuelo_id=? AND s.estado='PROGRAMADA' AND TIMESTAMP(s.fecha,s.hora_partida)>NOW()
+          |  AND (s.fecha<? OR s.fecha>? OR NOT EXISTS (
+          |    SELECT 1 FROM vuelo_dia_operacion d WHERE d.vuelo_id=s.vuelo_id AND d.dia_semana=WEEKDAY(s.fecha)+1))
+          |  AND EXISTS (SELECT 1 FROM pasaje p WHERE p.salida_id=s.id AND p.estado='EMITIDO')
+          |ORDER BY s.fecha LIMIT 5 FOR UPDATE""".stripMargin)
+      val blockedDates = try {
+        soldOutsideCalendar.setLong(1, flightId)
+        soldOutsideCalendar.setDate(2, Date.valueOf(flight.start))
+        soldOutsideCalendar.setDate(3, Date.valueOf(flight.end))
+        val blockedRs = soldOutsideCalendar.executeQuery()
+        val dates = scala.collection.mutable.ListBuffer.empty[String]
+        try while (blockedRs.next()) dates += blockedRs.getDate(1).toString
+        finally blockedRs.close()
+        dates.toList
+      } finally soldOutsideCalendar.close()
+      if (blockedDates.nonEmpty) {
+        conn.rollback()
+        return Left(FlightWriteError.InvalidData(
+          s"El nuevo período o los días de operación dejan fuera salidas con pasajes vendidos (${blockedDates.mkString(", ")}). " +
+            "Cancelá esas salidas explícitamente o mantenelas en el calendario"))
+      }
+
       val cancelRemovedDates = conn.prepareStatement(
         """UPDATE salida s SET estado='CANCELADA', motivo_cancelacion='Fuera del nuevo período de operación'
           |WHERE s.vuelo_id=? AND s.estado='PROGRAMADA' AND TIMESTAMP(s.fecha,s.hora_partida)>NOW()

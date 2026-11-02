@@ -164,3 +164,67 @@ Sprint 2 (06/10 al 19/10) | US8, US11, US9 y US10 (34 SP) | Terminado
 Sprint 3 (20/10 al 02/11) | US6, US15, US12, US13, US14, US16 y US19 (31 SP) | Planificado
 Después de la materia | US17 y US18: aplicación móvil (21 SP) | Sin planificar
 Todos los sprints | US20: testeo del incremento antes de cada demo (3 SP) | En curso
+6. Cómo levantar el sistema y recorrido de la demo
+Requisitos: Docker Desktop abierto, JDK 17 o posterior, sbt y Node.js. Todos los comandos son para PowerShell y se ejecutan desde la raíz del repositorio (APS), salvo que se indique otra carpeta.
+6.1 Levantar todo
+Paso 1 — Base de datos y servidor de correo de prueba
+Para una demo limpia conviene empezar con la base vacía. El primer comando BORRA los datos locales; omitirlo si se quiere conservar la base actual.
+docker compose down -v
+docker compose up -d --wait db
+docker compose --profile correo up -d mail
+Con la base nueva no hace falta aplicar migraciones: db/01 a db/03 ya incluyen todo lo del Sprint 3. Solo si se conserva una base anterior al Sprint 3, aplicar una vez:
+docker compose exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" aeronet < /aeronet/db/migrations/20261101_us6_edicion_cancelacion_vuelos.sql'
+docker compose exec -T db sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" aeronet < /aeronet/db/migrations/20261101_us15_notificaciones_cambios_cancelaciones.sql'
+Paso 2 — Variables de la API (terminal 1, que queda abierta durante toda la demo)
+$env:AERONET_JDBC_URL = "jdbc:mariadb://localhost:3306/aeronet"
+$env:AERONET_DB_USER = "aeronet_app"
+$env:AERONET_DB_PASSWORD = "aeronet_app_dev"
+$env:AERONET_JWT_SECRET = "clave-local-de-pruebas-cambiar-123456"
+$env:AERONET_SMTP_HOST = "localhost"
+$env:AERONET_SMTP_PORT = "1025"
+$env:AERONET_SMTP_FROM = "no-reply@aeronet.test"
+$env:AERONET_SMTP_STARTTLS = "false"
+$env:AERONET_DOCUMENT_TEMPLATE_DIR = "$PWD\docs\us10\templates"
+Paso 3 — Cuentas de demo (misma terminal; solo la primera vez o después de borrar la base)
+Elegir tres contraseñas distintas de al menos 12 caracteres y anotarlas para la demo.
+$env:AERONET_DEV_ACCOUNTS_ENABLED = "true"
+$env:AERONET_DEV_ADMIN_PASSWORD = "<contraseña admin>"
+$env:AERONET_DEV_MOSTRADOR_PASSWORD = "<contraseña mostrador>"
+$env:AERONET_DEV_PASAJERO_PASSWORD = "<contraseña pasajero>"
+cd backend
+sbt --server "runMain com.transport.system.DevAccounts"
+Quedan creadas admin.dev@aeronet.test, mostrador.dev@aeronet.test y pasajero.dev@aeronet.test.
+Paso 4 — API (misma terminal, dentro de backend)
+sbt --server "runMain com.transport.system.BackendMain"
+Esperar el mensaje "AeroNet API escuchando en http://localhost:8080". La opción --server evita el error "Failed to start server" del cliente de sbt.
+Paso 5 — Interfaz (terminal 2)
+cd frontend
+npm install
+npm run dev
+npm install solo hace falta la primera vez. Abrir http://localhost:5173 para la aplicación y http://localhost:8025 para ver los correos que envía el sistema (Mailpit). Conviene tener una ventana normal para el administrador y otra de incógnito para el pasajero o el mostrador.
+6.2 Preparación (antes de empezar a presentar)
+Iniciar sesión como admin.dev@aeronet.test, entrar a "Alta de vuelo" y crear el vuelo de demo:
+Código AN9001, cualquier origen y destino, salida 10:00 y llegada 12:00 el mismo día, desde mañana hasta dentro de 7 días, todos los días de la semana, Economy 20 asientos a $50.000 y Primera 5 asientos a $120.000.
+6.3 Recorrido de la demo
+US | Qué mostrar | Resultado esperado
+US12 | Mostrador (mostrador.dev) → "Vender pasajes". Buscar la ruta del AN9001, elegir la salida de mañana en Economy, cargar 2 pasajeros, email pasajero.dev@aeronet.test, efectivo → "Cobrar y confirmar venta". Hacer una segunda venta con tarjeta (autorización ABC123, marca Visa, últimos 4 dígitos 4242) a otro email. | "Venta confirmada" con código de compra. Baja la disponibilidad en la búsqueda. En Mailpit llega el correo con pasajes y factura (puede tardar unos 30 segundos). La primera venta aparece en "Tus viajes" del pasajero porque el email coincide con su cuenta.
+US13 | Mostrador → "Consultar compras". Buscar por apellido de un pasajero, por código de compra o por email. Reenviar la documentación a un email nuevo. | Se ve vuelo, fecha, pasajeros, clase, importe y estado. El reenvío llega a Mailpit al email indicado.
+US6 | Pasajero (pasajero.dev, ventana de incógnito): reservar 1 pasaje del AN9001 para pasado mañana sin pagarlo. Hacer este paso en vivo: la reserva vence a los 10 minutos. | Compra pendiente de pago en "Tus viajes".
+US6 + US15 | Admin → "Administrar vuelos" → Editar AN9001 → cambiar el precio de Economy y guardar. | Se guarda. No llega ningún correo y el importe de las compras ya hechas no cambia (verlo en "Consultar compras").
+US6 | Editar → capacidad de Economy en 1 → guardar. | Error: no se puede reducir la capacidad por debajo de los asientos vendidos.
+US6 | Editar → cambiar "Desde" a pasado mañana → guardar. | Error: el nuevo período deja fuera salidas con pasajes vendidos. La salida de mañana sigue programada.
+US6 + US15 | Editar → horario 10:30 a 12:30 → guardar. | En Mailpit llega "Cambio de horario — AN9001" con el horario anterior y el nuevo. En "Tus viajes" del pasajero aparece el aviso.
+US6 + US15 | En la lista de próximas salidas, "Cancelar salida" de pasado mañana con un motivo (por ejemplo "Mantenimiento de la aeronave"). | La compra pendiente del pasajero pasa a cancelada, llega el correo con el motivo, el aviso aparece en "Tus viajes" y esa salida ya no sale en la búsqueda.
+US14 | Admin → "Reportes de ocupación": filtrar por AN9001, clase Economy y rango de mañana a dentro de 7 días. "Descargar CSV". Después abrir http://localhost:5173/admin/occupancy con la cuenta de mostrador. | Por salida: capacidad, vendidos, reservas pendientes, disponibles, % de ocupación y recaudado, que coinciden con las ventas hechas. El CSV se descarga. El mostrador ve "Acceso denegado".
+US16 | Admin → "Gestionar usuarios": crear demo.mostrador@aeronet.test con rol Empleado y contraseña inicial. Iniciar sesión con esa cuenta en incógnito. Volver como admin, editar su nombre y cambiarle el perfil, y después "Desactivar". Recargar la ventana de incógnito e intentar iniciar sesión de nuevo. Intentar desactivar la propia cuenta del admin. | La sesión abierta se cierra y el login se rechaza. El admin no puede desactivarse a sí mismo.
+Auditoría | Mostrar los últimos eventos con el comando de abajo (la entrada "Auditoría" del menú todavía no tiene pantalla). | Se ven flight.updated, flight.departure.cancelled, user.created, user.updated y user.disabled, con el email del administrador que hizo cada cambio.
+US19 | Abrir tests/load/README.md y el último informe de tests/load/results/. | 200 usuarios simultáneos, p95 por debajo de 3 segundos, sin errores del servidor y sin sobreventa.
+Comando para la auditoría (desde la raíz del repositorio, en una terminal nueva):
+"SELECT a.created_at, u.email, a.accion, a.entidad, a.entidad_id, a.detalles FROM auditoria a LEFT JOIN usuario u ON u.id=a.actor_usuario_id ORDER BY a.id DESC LIMIT 15;" | docker compose exec -T db mariadb -uaeronet_app -paeronet_app_dev aeronet -t
+6.4 Si algo falla
+Problema | Solución
+No se puede iniciar sesión con las cuentas dev | Repetir el paso 3 (vuelve a crear las cuentas con las contraseñas indicadas).
+No llegan correos a Mailpit | Revisar que Mailpit esté levantado (paso 1) y que las variables AERONET_SMTP_* se hayan definido antes de iniciar la API; si no, cortar la API con Ctrl+C, definirlas y repetir el paso 4.
+El correo de pasajes y factura no llega pero los avisos sí | Falta AERONET_DOCUMENT_TEMPLATE_DIR o se definió desde otra carpeta: tiene que apuntar a docs\us10\templates del repositorio.
+La API no conecta con la base | Verificar con docker compose ps que aeronet-db esté "healthy".
+La reserva del pasajero desapareció | Venció a los 10 minutos: volver a reservar.

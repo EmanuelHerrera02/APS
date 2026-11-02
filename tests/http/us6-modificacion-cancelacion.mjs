@@ -73,6 +73,20 @@ report.check('US6-03', 'El cambio de precio no altera compras previas y actualiz
     && sqlValue(container, `SELECT TIME_FORMAT(hora_partida,'%H:%i') FROM salida WHERE id=${confirmedDepartureId};`) === '11:00',
   `importe previo=${priceSnapshot}`);
 
+const confirmedDate = dates.find((row) => Number(row[0]) === confirmedDepartureId)?.[1];
+const shortenedPeriod = await api(`/admin/flights/${flightId}`, { method: 'PUT', token: adminToken, body: {
+  ...updatePayload, startDate: addDays(confirmedDate, 1),
+} });
+const removedWeekday = await api(`/admin/flights/${flightId}`, { method: 'PUT', token: adminToken, body: {
+  ...updatePayload, operatingDays: operatingDays.filter((day) => day !== isoWeekday(confirmedDate)),
+} });
+report.check('US6-08', 'Rechaza cambios de período o días que dejan fuera pasajes vendidos',
+  shortenedPeriod.status === 409 && removedWeekday.status === 409
+    && /pasajes vendidos/i.test(shortenedPeriod.body.error || '')
+    && sqlValue(container, `SELECT estado FROM salida WHERE id=${confirmedDepartureId};`) === 'PROGRAMADA'
+    && sqlValue(container, `SELECT estado FROM compra WHERE id=${confirmedPurchaseId};`) === 'CONFIRMADA',
+  `período HTTP ${shortenedPeriod.status}, días HTTP ${removedWeekday.status}`);
+
 response = await api(`/admin/flights/${flightId}/departures/${pendingDepartureId}/cancel`, {
   method: 'POST', token: adminToken, body: { reason: 'Ajuste operativo US6' },
 });

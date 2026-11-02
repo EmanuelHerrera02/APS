@@ -56,9 +56,12 @@ report.check('US16-06', 'Deshabilitar bloquea nuevo acceso y revoca sesiones act
   && revokedSession.status === 401 && disabledLogin.status === 401 && revokedCount >= 1,
   `PUT=${disabled.status}, sesión=${revokedSession.status}, login=${disabledLogin.status}, revocadas=${revokedCount}`);
 
-const audits = Number(sqlValue(container, `SELECT COUNT(*) FROM auditoria WHERE actor_usuario_id=${adminId}
-  AND entidad='usuario' AND entidad_id=${createdId} AND accion IN ('user.created','user.updated');`));
-report.check('US16-07', 'Registrar las modificaciones en auditoría', audits >= 2, `${audits} eventos`);
+const auditCount = (action) => Number(sqlValue(container, `SELECT COUNT(*) FROM auditoria WHERE actor_usuario_id=${adminId}
+  AND entidad='usuario' AND entidad_id=${createdId} AND accion='${action}';`));
+const [created, updated, disabledAudits] = ['user.created', 'user.updated', 'user.disabled'].map(auditCount);
+report.check('US16-07', 'Registrar alta, modificación y deshabilitación como eventos distintos',
+  created === 1 && updated >= 1 && disabledAudits === 1,
+  `alta=${created}, modificación=${updated}, deshabilitación=${disabledAudits}`);
 
 // La cuenta creada queda deshabilitada como parte de la prueba; no borrar datos de auditoría.
 report.finish();
